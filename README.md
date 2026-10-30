@@ -86,6 +86,25 @@ brew install k-dash/nblm/nblm
 cargo install nblm-cli
 ```
 
+### Build this checkout
+
+With Rust, GNU Make, and [cargo-make](https://github.com/sagiegurari/cargo-make)
+installed (`cargo install cargo-make`), run from the repository root:
+
+```bash
+make                         # Build the release CLI
+make install                 # Install/update the nblm command from this checkout
+make run ARGS="--help"        # Run from source, rebuilding changes automatically
+make help                    # List available targets
+```
+
+`make install` uses `cargo install --path crates/nblm-cli --force --locked`.
+The binary goes into Cargo's bin directory (normally `~/.cargo/bin`); ensure it is
+on `PATH`. No `sudo` is needed. The installed binary is not editable: run
+`make install` again after changes, or use `make run` during development.
+`make` only builds; it does not update the installed command. All builds include
+local changes, whether committed or not.
+
 ### Python SDK
 
 ```bash

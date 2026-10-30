@@ -59,6 +59,24 @@ This command will:
 > [!IMPORTANT]
 > Run `makers all` or `cargo make all` after cloning to ensure your environment is properly configured.
 
+### Make shortcuts
+
+The root `Makefile` delegates to the existing `cargo-make` tasks:
+
+```bash
+make                         # Build the release CLI
+make install                 # Install/update the CLI from this checkout
+make run ARGS="--help"        # Build incrementally and run from source
+make check                   # Check Rust core and CLI
+make test                    # Run Rust core and CLI tests
+make ci                      # Run Rust formatting, Clippy, and tests
+make py-build                # Rebuild the editable Python SDK after Rust changes
+```
+
+`make install` calls `cargo make install-cli`, not `cargo make install` (which
+installs the pre-commit tooling and hooks). It installs the CLI only, not the
+Python SDK. `make py-build` uses the existing uv/maturin development workflow.
+
 ### 3. Make Your Changes
 
 Create a new branch for your changes:
