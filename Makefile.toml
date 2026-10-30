@@ -66,6 +66,16 @@ dependencies = ["before-build"]
 command = "cargo"
 args = ["build", "--workspace", "--exclude", "nblm-python", "${@}"]
 
+[tasks.install-cli]
+description = "Build and install/update the CLI from this checkout"
+command = "cargo"
+args = ["install", "--path", "crates/nblm-cli", "--force", "--locked"]
+
+[tasks.run]
+description = "Rebuild as needed and run the CLI from this checkout"
+command = "cargo"
+args = ["run", "--locked", "--package", "nblm-cli", "--", "${@}"]
+
 [tasks.clean]
 dependencies = ["before-build"]
 command = "cargo"
