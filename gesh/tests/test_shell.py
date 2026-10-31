@@ -219,6 +219,20 @@ def test_notebook_delete_requires_confirmation() -> None:
     assert "Cancelled" in out.getvalue()
 
 
+def test_numeric_notebook_reference_requires_prior_list() -> None:
+    shell, _, _, out = make_shell()
+    shell.handle("/nb add-file 1 /does/not/exist")
+    assert shell.last_command_failed is True
+    assert "run /nb list first" in out.getvalue()
+    assert "no such file" not in out.getvalue()
+
+    shell.handle("/nb list")
+    out.seek(0)
+    out.truncate(0)
+    shell.handle("/nb add-file 1 /does/not/exist")
+    assert "no such file" in out.getvalue()
+
+
 def test_missing_engine_is_a_clear_error() -> None:
     out = io.StringIO()
     shell = Shell(Config(project_number="1"), Console(file=out), chat_factory=FakeChat)
@@ -249,6 +263,7 @@ def test_abandoned_ask_is_reported_later_and_blocks_new_asks() -> None:
     shell, chat, _, out = make_shell(runner=abandon_runner)
     shell.handle("slow question")
     assert shell.pending is not None and "Stopped waiting" in out.getvalue()
+    assert shell.last_command_failed is True
     shell.handle("another")  # refused while the first is pending
     assert "still running" in out.getvalue()
     release.set()

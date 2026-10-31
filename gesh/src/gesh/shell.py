@@ -223,6 +223,9 @@ class Shell:
         try:
             response = self._run(call, "Asking Gemini Enterprise")
         except _Abandoned as abandoned:
+            # Interactive mode can continue, but scripted callers must see this command
+            # as unsuccessful and return a nonzero status instead of silently succeeding.
+            self.last_command_failed = True
             self.pending = _Pending(question, abandoned.thread, session_epoch, abandoned.result)
             where = (
                 f" in session {render.short_id(session_at_dispatch)}" if session_at_dispatch else ""
@@ -460,10 +463,14 @@ class Shell:
         return f"projects/{c.project_number}/locations/{c.location}/notebooks/{notebook_id}"
 
     def _notebook_id(self, ref: str) -> str:
-        if ref.isdigit() and self.notebook_cache:
-            nb = self._find_notebook(ref)
-            return str(nb.notebook_id)
-        return ref
+        if not ref.isdigit():
+            return ref
+        if not self.notebook_cache:
+            raise ShellError(
+                "notebook numbers come from /nb list; run /nb list first or use a notebook ID"
+            )
+        nb = self._find_notebook(ref)
+        return str(nb.notebook_id)
 
     def _find_notebook(self, ref: str, *, required: bool = True) -> Any:
         if not self.notebook_cache:
