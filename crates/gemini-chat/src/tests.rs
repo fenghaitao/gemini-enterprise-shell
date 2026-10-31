@@ -461,3 +461,36 @@ fn not_found_hints_at_a_location_mismatch() {
     assert!(http_reason(404, b"{}").contains("location matches the engine's own location"));
     assert!(!http_reason(403, b"{}").contains("location"));
 }
+
+#[test]
+fn static_token_provider_debug_never_prints_the_token() {
+    let printed = format!("{:?}", StaticTokenProvider::new("ya29.secret-token"));
+    assert!(!printed.contains("secret-token"), "{printed}");
+    assert!(printed.contains("redacted"));
+}
+
+#[test]
+fn ipv6_localhost_http_base_is_allowed_for_tests() {
+    // `Url::host_str()` keeps IPv6 brackets, so "[::1]" is the right match.
+    let url = reqwest::Url::parse("http://[::1]:8080/v1/").unwrap();
+    assert_eq!(url.host_str(), Some("[::1]"));
+    assert!(client().with_base_url("http://[::1]:8080/v1").is_ok());
+    assert!(client().with_base_url("http://localhost:8080/v1").is_ok());
+    assert!(client()
+        .with_base_url("http://[2001:db8::1]:8080/v1")
+        .is_err());
+    assert!(client().with_base_url("http://example.test/v1").is_err());
+}
+
+#[test]
+fn rebasing_keeps_each_offset_fields_own_json_type() {
+    let mut mixed = json!({"startIndex": 1, "endIndex": "4"});
+    shift_segment(&mut mixed, 10);
+    assert_eq!(mixed, json!({"startIndex": 11, "endIndex": "14"}));
+    let mut missing_start = json!({"endIndex": "4"});
+    shift_segment(&mut missing_start, 10);
+    assert_eq!(missing_start, json!({"startIndex": "10", "endIndex": "14"}));
+    let mut numbers = json!({"startIndex": 0, "endIndex": 3});
+    shift_segment(&mut numbers, 2);
+    assert_eq!(numbers, json!({"startIndex": 2, "endIndex": 5}));
+}
