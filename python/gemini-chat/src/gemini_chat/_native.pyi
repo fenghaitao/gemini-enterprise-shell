@@ -53,6 +53,27 @@ class GeminiEnterpriseClient:
         self, session_id: str, *, include_answer_details: bool = False
     ) -> dict[str, Any]:
         """Read a saved session, including persisted model selection; never generates."""
+    def search(
+        self,
+        terms: str,
+        *,
+        sharepoint_folder: str | None = None,
+        data_store_ids: list[str] | None = None,
+        page_size: int = 10,
+    ) -> dict[str, Any]:
+        """Search without generating: {query, hits[{document, title, uri, file_type,
+        content, snippet}], warnings}. With a folder, results are restricted to it."""
+    def answer_in_folder(
+        self,
+        question: str,
+        *,
+        search_terms: str,
+        sharepoint_folder: str,
+        data_store_ids: list[str],
+        page_size: int = 10,
+    ) -> dict[str, Any]:
+        """Answer only from files in one SharePoint folder (sessionless): {answer, folder,
+        search_query, citations, references, sources, warnings}."""
 
 class GeminiAssistResponse:
     @property

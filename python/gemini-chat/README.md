@@ -19,6 +19,22 @@ answer = client.ask(
 print(answer.answer, answer.session, answer.warnings)
 ```
 
+Answers limited to one SharePoint folder (folder-scoped Search, then the Answer API
+with only those files; sessionless):
+
+```python
+folder = "https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs"
+hits = client.search("sync handshake", sharepoint_folder=folder,
+                     data_store_ids=["your-sharepoint-file-datastore"])
+scoped = client.answer_in_folder(
+    "What does the spec say the handshake does?",
+    search_terms="sync handshake",          # keywords: every word must match
+    sharepoint_folder=folder,
+    data_store_ids=["your-sharepoint-file-datastore"],
+)
+print(scoped["answer"], [r["uri"] for r in scoped["references"]], scoped["warnings"])
+```
+
 Token providers: `GcloudTokenProvider()` (`gcloud auth print-access-token`) or
 `EnvTokenProvider()` (reads `GEMINI_CHAT_ACCESS_TOKEN`). Failures raise
 `GeminiChatError` with `session`, `do_not_retry` and `skipped_reasons`.

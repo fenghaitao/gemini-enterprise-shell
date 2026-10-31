@@ -6,7 +6,10 @@ use std::{
     time::Duration,
 };
 
-use gemini_chat::{AssistRequest, AssistResponse, GeminiEnterpriseConfig};
+use gemini_chat::{
+    AssistRequest, AssistResponse, FolderAnswerRequest, GeminiEnterpriseConfig, SearchRequest,
+    SharePointFolder,
+};
 use pyo3::{
     create_exception,
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
@@ -205,6 +208,52 @@ impl GeminiEnterpriseClient {
             inner.get_session(&session_id, include_answer_details).await
         })?;
         to_python(py, &session)
+    }
+
+    /// Search files without generating. With `sharepoint_folder`, results are restricted
+    /// to that folder (recursive) by SharePoint and re-checked; terms are keywords.
+    #[pyo3(signature = (terms, *, sharepoint_folder=None, data_store_ids=None, page_size=10))]
+    fn search(
+        &self,
+        py: Python<'_>,
+        terms: String,
+        sharepoint_folder: Option<String>,
+        data_store_ids: Option<Vec<String>>,
+        page_size: u32,
+    ) -> PyResult<Py<PyAny>> {
+        let mut request = SearchRequest::new(terms);
+        request.folder = sharepoint_folder
+            .as_deref()
+            .map(SharePointFolder::parse)
+            .transpose()
+            .map_err(map_error)?;
+        request.data_stores = data_store_ids.unwrap_or_default();
+        request.page_size = page_size;
+        let inner = Arc::clone(&self.inner);
+        let results = block_on(py, async move { inner.search(request).await })?;
+        to_python(py, &results)
+    }
+
+    /// Answer only from files in one SharePoint folder: a folder-scoped search with
+    /// `search_terms` (keywords), then the Answer API with just those files. Sessionless,
+    /// one generation. Raises if anything outside the folder is returned or cited.
+    #[pyo3(signature = (question, *, search_terms, sharepoint_folder, data_store_ids, page_size=10))]
+    fn answer_in_folder(
+        &self,
+        py: Python<'_>,
+        question: String,
+        search_terms: String,
+        sharepoint_folder: String,
+        data_store_ids: Vec<String>,
+        page_size: u32,
+    ) -> PyResult<Py<PyAny>> {
+        let folder = SharePointFolder::parse(&sharepoint_folder).map_err(map_error)?;
+        let mut request = FolderAnswerRequest::new(question, search_terms, folder);
+        request.data_stores = data_store_ids;
+        request.page_size = page_size;
+        let inner = Arc::clone(&self.inner);
+        let answer = block_on(py, async move { inner.answer_in_folder(request).await })?;
+        to_python(py, &answer)
     }
 
     fn __repr__(&self) -> &'static str {
