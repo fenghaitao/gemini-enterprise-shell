@@ -505,14 +505,13 @@ fn segment_is_valid(segment: &Value, reference_count: usize, text: &str) -> bool
     segment.is_object() && valid_references && valid_offsets
 }
 
-/// Rebase a validated segment's offsets onto the whole answer, keeping the JSON type
-/// the service used (the live API sends decimal strings such as "254").
+/// Rebase a validated segment's offsets onto the whole answer, keeping each field's
+/// own JSON type (the live API sends decimal strings such as "254"). A missing
+/// `startIndex` (meaning 0) takes the type of `endIndex`.
 fn shift_segment(segment: &mut Value, base: usize) {
-    let as_string = segment
-        .get("endIndex")
-        .or_else(|| segment.get("startIndex"))
-        .is_some_and(Value::is_string);
+    let end_is_string = segment.get("endIndex").is_some_and(Value::is_string);
     for key in ["startIndex", "endIndex"] {
+        let as_string = segment.get(key).map_or(end_is_string, Value::is_string);
         let shifted = segment_offset(segment, key).unwrap_or(0) + base;
         segment[key] = if as_string {
             Value::String(shifted.to_string())

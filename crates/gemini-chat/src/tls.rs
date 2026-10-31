@@ -1,5 +1,8 @@
 //! Additional trust roots (e.g. a corporate TLS-inspection CA) for the HTTP client.
 //! Certificate and hostname verification remain enabled; built-in roots are retained.
+//!
+//! Deliberately duplicated in `crates/nblm-core/src/tls.rs` so the two crates stay independent;
+//! keep both copies in sync (only the first environment variable name differs).
 
 use std::path::Path;
 

@@ -82,9 +82,18 @@ impl TokenProvider for EnvTokenProvider {
 }
 
 /// A fixed token (tests, or tokens obtained elsewhere).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StaticTokenProvider {
     token: String,
+}
+
+// Never print the bearer token.
+impl std::fmt::Debug for StaticTokenProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StaticTokenProvider")
+            .field("token", &"<redacted>")
+            .finish()
+    }
 }
 
 impl StaticTokenProvider {
