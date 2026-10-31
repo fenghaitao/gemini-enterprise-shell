@@ -5,6 +5,7 @@ use reqwest::{Client, Url};
 use crate::auth::{ensure_drive_scope, TokenProvider};
 use crate::env::EnvironmentConfig;
 use crate::error::Result;
+use crate::tls::TlsRoots;
 
 mod api;
 mod http;
@@ -25,6 +26,7 @@ pub struct NblmClient {
     backends: ClientBackends,
     environment: EnvironmentConfig,
     timeout: Duration,
+    tls_roots: TlsRoots,
 }
 
 impl NblmClient {
@@ -32,7 +34,9 @@ impl NblmClient {
         token_provider: Arc<dyn TokenProvider>,
         environment: EnvironmentConfig,
     ) -> Result<Self> {
-        let client = Client::builder()
+        let tls_roots = TlsRoots::from_env()?;
+        let client = tls_roots
+            .apply(Client::builder())
             .user_agent(concat!("nblm-cli/", env!("CARGO_PKG_VERSION")))
             .timeout(DEFAULT_TIMEOUT)
             .build()
@@ -54,6 +58,7 @@ impl NblmClient {
             backends,
             environment,
             timeout: DEFAULT_TIMEOUT,
+            tls_roots,
         })
     }
 
@@ -71,7 +76,9 @@ impl NblmClient {
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         // Update the underlying HTTP client's timeout
-        let client = Client::builder()
+        let client = self
+            .tls_roots
+            .apply(Client::builder())
             .user_agent(concat!("nblm-cli/", env!("CARGO_PKG_VERSION")))
             .timeout(timeout)
             .build()
@@ -91,7 +98,9 @@ impl NblmClient {
     }
 
     pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
-        let client = Client::builder()
+        let client = self
+            .tls_roots
+            .apply(Client::builder())
             .user_agent(concat!("nblm-cli/", env!("CARGO_PKG_VERSION")))
             .timeout(self.timeout)
             .build()
@@ -111,7 +120,9 @@ impl NblmClient {
     }
 
     pub fn with_user_project(mut self, project: impl Into<String>) -> Self {
-        let client = Client::builder()
+        let client = self
+            .tls_roots
+            .apply(Client::builder())
             .user_agent(concat!("nblm-cli/", env!("CARGO_PKG_VERSION")))
             .timeout(self.timeout)
             .build()

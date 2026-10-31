@@ -4,6 +4,7 @@ pub mod doctor;
 pub mod env;
 mod error;
 pub mod models;
+mod tls;
 
 pub use auth::oauth::{
     AuthorizeContext, AuthorizeParams, FileRefreshTokenStore, OAuthConfig, OAuthFlow, OAuthTokens,

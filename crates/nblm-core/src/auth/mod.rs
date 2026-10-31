@@ -54,7 +54,9 @@ struct TokenInfoResponse {
 }
 
 pub async fn ensure_drive_scope(provider: &dyn TokenProvider) -> Result<()> {
-    let client = Client::new();
+    let client = crate::tls::TlsRoots::from_env()?
+        .apply(Client::builder())
+        .build()?;
     let endpoint =
         std::env::var("NBLM_TOKENINFO_ENDPOINT").unwrap_or_else(|_| TOKENINFO_ENDPOINT.to_string());
     ensure_drive_scope_internal(provider, &client, &endpoint).await
