@@ -191,9 +191,17 @@ impl TokenProvider for EnvTokenProvider {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StaticTokenProvider {
     token: String,
+}
+
+impl std::fmt::Debug for StaticTokenProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StaticTokenProvider")
+            .field("token", &"<redacted>")
+            .finish()
+    }
 }
 
 impl StaticTokenProvider {
@@ -226,6 +234,13 @@ mod tests {
         let provider = StaticTokenProvider::new("test-token-123");
         let token = provider.access_token().await.unwrap();
         assert_eq!(token, "test-token-123");
+    }
+
+    #[test]
+    fn static_token_provider_debug_redacts_token() {
+        let printed = format!("{:?}", StaticTokenProvider::new("secret-token-123"));
+        assert!(printed.contains("<redacted>"));
+        assert!(!printed.contains("secret-token-123"));
     }
 
     #[tokio::test]
