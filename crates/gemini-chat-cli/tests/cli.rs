@@ -292,7 +292,10 @@ async fn answer_uses_only_folder_files_and_prints_references() {
         .and(path(format!(
             "/v1/{ENGINE}/servingConfigs/default_search:answer"
         )))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"answer": {
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "session": {"name": format!("{ENGINE}/sessions/5")},
+            "answer": {
+            "name": format!("{ENGINE}/sessions/5/answers/6"),
             "state": "SUCCEEDED", "answerText": "Alpha answer.",
             "citations": [{"endIndex": "6", "sources": [{"referenceId": "0"}]}],
             "references": [{"chunkInfo": {"content": "Alpha", "documentMetadata": {"uri": format!("{FOLDER}/A-0001.txt"), "title": "A-0001"}}}]
@@ -314,6 +317,9 @@ async fn answer_uses_only_folder_files_and_prints_references() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Alpha answer."))
+        .stdout(predicate::str::contains(format!(
+            "Session: {ENGINE}/sessions/5"
+        )))
         .stdout(predicate::str::contains(
             "Files used: 2 (1 full text, 1 snippet)",
         ))
@@ -360,4 +366,29 @@ async fn folder_search_without_a_datastore_is_rejected_locally() {
         .failure()
         .stderr(predicate::str::contains("needs at least one datastore"));
     assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn session_summary_labels_folder_answer_turns() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/{ENGINE}/sessions/456")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "name": format!("{ENGINE}/sessions/456"),
+            "turns": [
+                {"query": {"text": "chat q"},
+                 "queryConfig": {"google.discoveryengine.googleapis.com.Assistant.model_id": "gemini-4-argon"}},
+                {"query": {"text": "folder q"}, "answer": format!("{ENGINE}/sessions/456/answers/1")}
+            ]
+        })))
+        .mount(&server)
+        .await;
+    command(&server)
+        .args(["session", "--session-id", "456"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Turn 1: model gemini-4-argon | chat q",
+        ))
+        .stdout(predicate::str::contains("Turn 2: folder answer | folder q"));
 }

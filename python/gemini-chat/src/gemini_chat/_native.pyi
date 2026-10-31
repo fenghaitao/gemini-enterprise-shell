@@ -76,9 +76,12 @@ class GeminiEnterpriseClient:
         sharepoint_folder: str,
         data_store_ids: list[str],
         page_size: int = 10,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
-        """Answer only from files in one SharePoint folder (sessionless): {answer, folder,
-        search_query, citations, references, sources, warnings}."""
+        """Answer only from files in one SharePoint folder: {answer, session,
+        answer_resource, folder, search_query, citations, references, sources, warnings}.
+        Pass the returned session as session_id to ask a follow-up; each turn searches
+        the folder again with that turn's search_terms."""
 
 class GeminiAssistResponse:
     @property

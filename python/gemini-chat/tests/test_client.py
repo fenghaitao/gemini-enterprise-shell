@@ -65,9 +65,14 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         if self.path.endswith("servingConfigs/default_search:answer"):
+            session = body.get("session", "")
+            if session.endswith("/sessions/-"):
+                session = f"{ENGINE}/sessions/900"
             self._send(
                 {
+                    "session": {"name": session},
                     "answer": {
+                        "name": f"{session}/answers/1",
                         "state": "SUCCEEDED",
                         "answerText": "Alpha answer.",
                         "citations": [{"endIndex": "6", "sources": [{"referenceId": "0"}]}],
@@ -82,7 +87,7 @@ class _Handler(BaseHTTPRequestHandler):
                                 }
                             }
                         ],
-                    }
+                    },
                 }
             )
             return
@@ -303,3 +308,26 @@ def test_folder_search_requires_a_datastore_and_urls_normalize(
     assert normalize_sharepoint_folder(spaced) == FOLDER
     with pytest.raises(GeminiChatError, match="sharing links"):
         normalize_sharepoint_folder("https://example.sharepoint.com/:f:/s/eng/Eabc")
+
+
+def test_folder_answers_continue_a_session(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    client = _client(monkeypatch, server)
+    first = client.answer_in_folder(
+        "What does A say?", search_terms="alpha", sharepoint_folder=FOLDER, data_store_ids=["sp"]
+    )
+    assert first["session"] == f"{ENGINE}/sessions/900"
+    assert first["answer_resource"] == f"{ENGINE}/sessions/900/answers/1"
+    follow = client.answer_in_folder(
+        "Shorten that.",
+        search_terms="alpha beta",
+        sharepoint_folder=FOLDER,
+        data_store_ids=["sp"],
+        session_id="900",
+    )
+    assert follow["session"] == first["session"]
+    posts = [r for r in _Handler.requests if r[0] == "POST"]
+    answer_sessions = [str((r[2] or {}).get("session")) for r in posts if r[1].endswith(":answer")]
+    searches = [r for r in posts if r[1].endswith(":search")]
+    assert answer_sessions[0].endswith("/sessions/-")
+    assert answer_sessions[1] == first["session"]
+    assert len(searches) == 2  # every turn searches the folder again

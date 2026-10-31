@@ -90,7 +90,8 @@ enum Command {
     /// that folder by SharePoint and re-checked locally.
     Search(SearchArgs),
     /// Answer only from files in one SharePoint folder: a folder-scoped search with
-    /// --search-terms, then an answer from just those files. Sessionless; one generation.
+    /// --search-terms, then an answer from just those files (one generation). Starts a
+    /// session; continue it with --session-id (each turn searches the folder again).
     Answer(FolderAnswerArgs),
 }
 
@@ -124,6 +125,9 @@ struct FolderAnswerArgs {
     /// Files to retrieve, 1-100. Only about the top 5 arrive with full text.
     #[arg(long, default_value_t = 10)]
     page_size: u32,
+    /// Continue a folder-answer session (ID or full name) from an earlier `answer`.
+    #[arg(long, value_name = "ID")]
+    session_id: Option<String>,
     question: String,
 }
 
@@ -217,6 +221,7 @@ async fn run(cli: Cli) -> Result<()> {
             let mut request = FolderAnswerRequest::new(args.question, args.search_terms, folder);
             request.data_stores = args.data_stores;
             request.page_size = args.page_size;
+            request.session = args.session_id;
             let answer = client.answer_in_folder(request).await?;
             emit_folder_answer(&answer, global.json)?;
         }
@@ -234,13 +239,12 @@ async fn run(cli: Cli) -> Result<()> {
                 }
                 for (i, turn) in session.turns.iter().enumerate() {
                     let query = turn.query.as_ref().map_or("", |q| q.text.as_str());
-                    writeln!(
-                        out,
-                        "Turn {}: model {} | {}",
-                        i + 1,
-                        turn.model_id().unwrap_or("not reported"),
-                        query
-                    )?;
+                    let kind = if turn.answer.is_some() || turn.detailed_answer.is_some() {
+                        "folder answer".to_string()
+                    } else {
+                        format!("model {}", turn.model_id().unwrap_or("not reported"))
+                    };
+                    writeln!(out, "Turn {}: {kind} | {query}", i + 1)?;
                 }
                 if args.include_answer_details {
                     writeln!(out, "(answer details are included with --json)")?;
@@ -322,6 +326,7 @@ fn emit_folder_answer(answer: &FolderAnswer, json_mode: bool) -> Result<()> {
         writeln!(out, "{}", serde_json::to_string_pretty(answer)?)?;
     } else {
         writeln!(out, "{}\n", answer.answer)?;
+        writeln!(out, "Session: {}", answer.session)?;
         writeln!(out, "Folder: {}", answer.folder)?;
         let full = answer.sources.iter().filter(|s| s.full_text).count();
         writeln!(

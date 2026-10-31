@@ -11,6 +11,8 @@ use crate::{GeminiEnterpriseConfig, StaticTokenProvider};
 const FOLDER: &str = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs";
 const ENGINE: &str = "projects/123/locations/us/collections/default_collection/engines/search";
 const STORE: &str = "projects/123/locations/us/collections/default_collection/dataStores/sp_file";
+const SESSION: &str =
+    "projects/123/locations/us/collections/default_collection/engines/search/sessions/77";
 
 async fn client(server: &MockServer) -> GeminiEnterpriseClient {
     GeminiEnterpriseClient::new(
@@ -47,7 +49,8 @@ fn search_response() -> Value {
 }
 
 fn answer_response(uri: &str) -> Value {
-    json!({"answer": {
+    json!({"session": {"name": SESSION, "state": "IN_PROGRESS"}, "answer": {
+        "name": format!("{SESSION}/answers/88"),
         "state": "SUCCEEDED",
         "answerText": "Alpha says sync works.",
         "citations": [{"endIndex": "22", "sources": [{"referenceId": "0"}]}],
@@ -346,7 +349,8 @@ async fn pagination_signals_are_reported_even_below_the_page_size() {
 }
 
 fn answer_with_citation(citation: Value) -> Vec<u8> {
-    serde_json::to_vec(&json!({"answer": {
+    serde_json::to_vec(&json!({"session": {"name": SESSION}, "answer": {
+        "name": format!("{SESSION}/answers/1"),
         "state": "SUCCEEDED",
         "answerText": "Ä sync answer.",
         "citations": [citation],
@@ -384,4 +388,111 @@ fn citation_offsets_are_parsed_strictly() {
             "{bad}"
         );
     }
+}
+
+#[tokio::test]
+async fn folder_answers_create_and_continue_a_session_rescoping_every_turn() {
+    let server = MockServer::start().await;
+    mount_search(&server, search_response()).await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:answer"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(answer_response(&format!("{FOLDER}/sub/A-0001.txt"))),
+        )
+        .expect(2)
+        .mount(&server)
+        .await;
+    let c = client(&server).await;
+    let mut first = FolderAnswerRequest::new("What does A say?", "sync", folder());
+    first.data_stores = vec!["sp_file".into()];
+    let turn1 = c.answer_in_folder(first).await.unwrap();
+    assert_eq!(turn1.session, SESSION);
+    assert_eq!(turn1.answer_resource, format!("{SESSION}/answers/88"));
+
+    let mut follow_up = FolderAnswerRequest::new("Shorten that.", "sync alpha", folder());
+    follow_up.data_stores = vec!["sp_file".into()];
+    follow_up.session = Some("77".into());
+    c.answer_in_folder(follow_up).await.unwrap();
+
+    let answers = bodies(&server, ":answer").await;
+    assert_eq!(answers[0]["session"], format!("{ENGINE}/sessions/-"));
+    assert_eq!(answers[1]["session"], SESSION);
+    // The follow-up searched the folder again and sent only those files.
+    let searches = bodies(&server, ":search").await;
+    assert_eq!(searches.len(), 2);
+    assert_eq!(
+        searches[1]["query"],
+        format!("(sync alpha) path:\"{FOLDER}\"")
+    );
+    assert!(answers[1]["searchSpec"].get("searchParams").is_none());
+    assert!(answers[1]["searchSpec"]["searchResultList"].is_object());
+}
+
+#[tokio::test]
+async fn folder_answer_session_and_answer_names_are_checked() {
+    for (session, answer_name) in [
+        (
+            "projects/123/locations/us/collections/default_collection/engines/other/sessions/77",
+            format!("{SESSION}/answers/88"),
+        ),
+        (SESSION, format!("{ENGINE}/sessions/99/answers/88")),
+        (
+            "projects/123/locations/us/collections/default_collection/engines/search/sessions/78",
+            format!("{SESSION}/answers/88"),
+        ),
+    ] {
+        let server = MockServer::start().await;
+        mount_search(&server, search_response()).await;
+        let mut response = answer_response(&format!("{FOLDER}/sub/A-0001.txt"));
+        response["session"]["name"] = json!(session);
+        response["answer"]["name"] = json!(answer_name);
+        Mock::given(method("POST"))
+            .and(path(format!(
+                "/v1/{ENGINE}/servingConfigs/default_search:answer"
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount(&server)
+            .await;
+        let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+        request.data_stores = vec!["sp_file".into()];
+        request.session = Some("77".into());
+        let error = client(&server)
+            .await
+            .answer_in_folder(request)
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("mismatch") || message.contains("invalid returned session"),
+            "{session}: {message}"
+        );
+    }
+}
+
+#[test]
+fn folder_answer_turns_survive_session_readback() {
+    let turn: crate::AssistSessionTurn = serde_json::from_value(json!({
+        "query": {"text": "What does A say?"},
+        "answer": format!("{SESSION}/answers/88"),
+        "detailedAnswer": {"name": format!("{SESSION}/answers/88"), "state": "SUCCEEDED",
+                           "answerText": "Alpha says sync works.", "references": []}
+    }))
+    .unwrap();
+    assert_eq!(
+        turn.answer.as_deref(),
+        Some(format!("{SESSION}/answers/88").as_str())
+    );
+    assert_eq!(
+        turn.detailed_answer.as_ref().unwrap()["answerText"],
+        "Alpha says sync works."
+    );
+    assert_eq!(turn.model_id(), None);
+    let round_trip = serde_json::to_value(&turn).unwrap();
+    assert_eq!(
+        round_trip["detailedAnswer"]["answerText"],
+        "Alpha says sync works."
+    );
 }

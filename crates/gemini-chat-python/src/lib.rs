@@ -235,9 +235,11 @@ impl GeminiEnterpriseClient {
     }
 
     /// Answer only from files in one SharePoint folder: a folder-scoped search with
-    /// `search_terms` (keywords), then the Answer API with just those files. Sessionless,
-    /// one generation. Raises if anything outside the folder is returned or cited.
-    #[pyo3(signature = (question, *, search_terms, sharepoint_folder, data_store_ids, page_size=10))]
+    /// `search_terms` (keywords), then the Answer API with just those files (one
+    /// generation). Starts a session, or continues `session_id`; every turn searches the
+    /// folder again. Raises if anything outside the folder is returned or cited.
+    #[pyo3(signature = (question, *, search_terms, sharepoint_folder, data_store_ids, page_size=10, session_id=None))]
+    #[allow(clippy::too_many_arguments)]
     fn answer_in_folder(
         &self,
         py: Python<'_>,
@@ -246,11 +248,13 @@ impl GeminiEnterpriseClient {
         sharepoint_folder: String,
         data_store_ids: Vec<String>,
         page_size: u32,
+        session_id: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let folder = SharePointFolder::parse(&sharepoint_folder).map_err(map_error)?;
         let mut request = FolderAnswerRequest::new(question, search_terms, folder);
         request.data_stores = data_store_ids;
         request.page_size = page_size;
+        request.session = session_id;
         let inner = Arc::clone(&self.inner);
         let answer = block_on(py, async move { inner.answer_in_folder(request).await })?;
         to_python(py, &answer)
