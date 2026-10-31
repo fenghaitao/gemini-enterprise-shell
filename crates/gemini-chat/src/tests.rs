@@ -312,3 +312,72 @@ fn skipped_small_talk_reports_reason_instead_of_a_generic_failure() {
         Err(Error::Skipped { .. })
     ));
 }
+
+fn grounded(text: &str, segments: Value) -> Value {
+    json!({"groundedContent":{
+        "content":{"text":text},
+        "textGroundingMetadata":{
+            "references":[{"documentMetadata":{"uri":"https://example.test/doc","title":"Doc"}}],
+            "segments":segments}}})
+}
+
+fn answer_frame(replies: Value) -> Value {
+    json!([{"answer":{"state":"SUCCEEDED","name":format!("{SESSION}/assistAnswers/789"),"replies":replies},
+            "sessionInfo":{"session":SESSION}}])
+}
+
+#[test]
+fn fragment_relative_grounding_offsets_are_validated_locally_and_rebased() {
+    // Two fragments, each carrying metadata whose offsets are relative to that fragment.
+    let replies = json!([
+        grounded(
+            "First part. ",
+            json!([{"startIndex":"0","endIndex":"10","referenceIndices":[0],"text":"First part"}])
+        ),
+        grounded(
+            "Second part.",
+            json!([{"startIndex":"0","endIndex":"11","referenceIndices":[0],"text":"Second part"}])
+        ),
+    ]);
+    let r = parse(answer_frame(replies)).unwrap();
+    assert_eq!(r.answer, "First part. Second part.");
+    assert_eq!(r.grounding.len(), 2);
+    // After parsing, offsets point into the whole answer and keep the string type.
+    let second = &r.grounding[1].segments[0];
+    assert_eq!(second["startIndex"], "12");
+    assert_eq!(second["endIndex"], "23");
+    assert_eq!(&r.answer[12..23], "Second part");
+    assert_eq!(r.grounding[0].segments[0]["startIndex"], "0");
+}
+
+#[test]
+fn standalone_grounding_with_whole_answer_offsets_still_passes() {
+    // Observed live shape: text fragments first, then one metadata-only reply whose
+    // offsets are relative to the whole answer.
+    let replies = json!([
+        {"groundedContent":{"content":{"text":"Alpha. "}}},
+        {"groundedContent":{"content":{"text":"Beta gamma."}}},
+        {"groundedContent":{"textGroundingMetadata":{
+            "references":[{"documentMetadata":{"uri":"https://example.test/doc"}}],
+            "segments":[{"startIndex":"7","endIndex":"17","referenceIndices":[0],"text":"Beta gamma"},
+                        {"startIndex":"0","endIndex":"5","referenceIndices":[0],"text":"Alpha"}]}}},
+    ]);
+    let r = parse(answer_frame(replies)).unwrap();
+    assert_eq!(r.grounding[0].segments[0]["startIndex"], "7");
+    assert_eq!(r.native_reference_count(), 1);
+}
+
+#[test]
+fn grounding_offsets_valid_in_no_base_are_rejected() {
+    let replies = json!([grounded(
+        "Short.",
+        json!([{"startIndex":"0","endIndex":"40","referenceIndices":[0]}])
+    ),]);
+    assert!(parse(answer_frame(replies)).is_err());
+    // Quoted text that matches neither the fragment nor the whole answer.
+    let replies = json!([
+        {"groundedContent":{"content":{"text":"One. "}}},
+        grounded("Two.", json!([{"startIndex":"0","endIndex":"3","referenceIndices":[0],"text":"Six"}])),
+    ]);
+    assert!(parse(answer_frame(replies)).is_err());
+}

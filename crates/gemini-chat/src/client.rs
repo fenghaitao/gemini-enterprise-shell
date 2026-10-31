@@ -296,7 +296,9 @@ impl GeminiEnterpriseClient {
         }
         let mut session = requested_session;
         let mut text = String::new();
-        let mut grounding = Vec::new();
+        // Each grounding block with the coordinate bases its offsets may be relative to.
+        let mut pending_grounding: Vec<(TextGroundingMetadata, Vec<OffsetBase>)> = Vec::new();
+        let mut last_grounding_end = 0;
         let mut tools = Vec::new();
         let mut terminal = None;
         let mut skipped_reasons: Vec<String> = Vec::new();
@@ -326,14 +328,28 @@ impl GeminiEnterpriseClient {
                     return Err(assist_error("answer data after a terminal state", session));
                 }
                 for reply in answer.replies {
+                    let mut fragment = None;
                     if let Some(content) = reply.grounded_content.content {
                         if !content.thought {
+                            let start = text.len();
                             text.push_str(&content.text.unwrap_or_default());
+                            fragment = Some(OffsetBase::Range(start, text.len()));
                         }
                     }
                     if let Some(meta) = reply.grounded_content.text_grounding_metadata {
-                        // Preserve per-batch indices rather than silently flattening distinct references.
-                        grounding.push(meta);
+                        // Preserve per-batch indices rather than silently flattening distinct
+                        // references. Metadata attached to a text fragment is tried against
+                        // that fragment first; standalone metadata (the observed live shape)
+                        // against the whole answer first, then the text since the last block.
+                        let bases = match fragment {
+                            Some(own) => vec![own, OffsetBase::Whole],
+                            None => vec![
+                                OffsetBase::Whole,
+                                OffsetBase::Range(last_grounding_end, text.len()),
+                            ],
+                        };
+                        pending_grounding.push((meta, bases));
+                        last_grounding_end = text.len();
                     }
                 }
                 match answer.state.as_deref() {
@@ -380,43 +396,33 @@ impl GeminiEnterpriseClient {
         if text.trim().is_empty() {
             return Err(assist_error("no textual answer", Some(session)));
         }
-        for metadata in &grounding {
-            for segment in &metadata.segments {
-                let valid_references = segment.get("referenceIndices").is_none_or(|indices| {
-                    indices.as_array().is_some_and(|indices| {
-                        indices.iter().all(|index| {
-                            index
-                                .as_u64()
-                                .is_some_and(|index| index < metadata.references.len() as u64)
-                        })
-                    })
-                });
-                let offset = |key: &str| -> Option<usize> {
-                    match segment.get(key) {
-                        None => Some(0),
-                        Some(value) => value
-                            .as_u64()
-                            .or_else(|| value.as_str()?.parse().ok())
-                            .and_then(|n| usize::try_from(n).ok()),
-                    }
+        let mut grounding = Vec::with_capacity(pending_grounding.len());
+        for (mut metadata, bases) in pending_grounding {
+            // One base per block, so a block never mixes coordinate systems.
+            let base = bases.into_iter().find_map(|base| {
+                let (start, end) = match base {
+                    OffsetBase::Whole => (0, text.len()),
+                    OffsetBase::Range(start, end) => (start, end),
                 };
-                let valid_offsets =
-                    offset("startIndex")
-                        .zip(offset("endIndex"))
-                        .is_some_and(|(start, end)| {
-                            text.get(start..end).is_some_and(|value| {
-                                segment
-                                    .get("text")
-                                    .is_none_or(|quoted| quoted.as_str() == Some(value))
-                            })
-                        });
-                if !segment.is_object() || !valid_references || !valid_offsets {
-                    return Err(assist_error(
-                        "invalid native grounding indices or UTF-8 byte offsets",
-                        Some(session),
-                    ));
+                let slice = text.get(start..end)?;
+                metadata
+                    .segments
+                    .iter()
+                    .all(|segment| segment_is_valid(segment, metadata.references.len(), slice))
+                    .then_some(start)
+            });
+            let Some(base) = base else {
+                return Err(assist_error(
+                    "invalid native grounding indices or UTF-8 byte offsets",
+                    Some(session),
+                ));
+            };
+            if base > 0 {
+                for segment in &mut metadata.segments {
+                    shift_segment(segment, base);
                 }
             }
+            grounding.push(metadata);
         }
         let mut warnings = Vec::new();
         if !grounding.iter().any(|g| !g.references.is_empty()) {
@@ -445,6 +451,63 @@ fn validate_segment(value: &str, label: &str) -> Result<()> {
         return Err(Error::validation(format!("invalid enterprise {label}; use a resource ID or a resource in the configured project/location/engine")));
     }
     Ok(())
+}
+
+/// Text that a grounding block's segment offsets are measured against.
+#[derive(Clone, Copy)]
+enum OffsetBase {
+    Whole,
+    /// Byte range of the aggregated answer text.
+    Range(usize, usize),
+}
+
+fn segment_offset(segment: &Value, key: &str) -> Option<usize> {
+    match segment.get(key) {
+        None => Some(0),
+        Some(value) => value
+            .as_u64()
+            .or_else(|| value.as_str()?.parse().ok())
+            .and_then(|n| usize::try_from(n).ok()),
+    }
+}
+
+fn segment_is_valid(segment: &Value, reference_count: usize, text: &str) -> bool {
+    let valid_references = segment.get("referenceIndices").is_none_or(|indices| {
+        indices.as_array().is_some_and(|indices| {
+            indices.iter().all(|index| {
+                index
+                    .as_u64()
+                    .is_some_and(|index| index < reference_count as u64)
+            })
+        })
+    });
+    let valid_offsets = segment_offset(segment, "startIndex")
+        .zip(segment_offset(segment, "endIndex"))
+        .is_some_and(|(start, end)| {
+            text.get(start..end).is_some_and(|value| {
+                segment
+                    .get("text")
+                    .is_none_or(|quoted| quoted.as_str() == Some(value))
+            })
+        });
+    segment.is_object() && valid_references && valid_offsets
+}
+
+/// Rebase a validated segment's offsets onto the whole answer, keeping the JSON type
+/// the service used (the live API sends decimal strings such as "254").
+fn shift_segment(segment: &mut Value, base: usize) {
+    let as_string = segment
+        .get("endIndex")
+        .or_else(|| segment.get("startIndex"))
+        .is_some_and(Value::is_string);
+    for key in ["startIndex", "endIndex"] {
+        let shifted = segment_offset(segment, key).unwrap_or(0) + base;
+        segment[key] = if as_string {
+            Value::String(shifted.to_string())
+        } else {
+            Value::from(shifted)
+        };
+    }
 }
 
 fn assist_error(reason: impl Into<String>, session: Option<String>) -> Error {
