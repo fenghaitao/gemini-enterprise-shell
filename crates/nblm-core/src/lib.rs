@@ -6,6 +6,8 @@ mod error;
 pub mod models;
 mod tls;
 
+pub use tls::http_client_builder;
+
 pub use auth::oauth::{
     AuthorizeContext, AuthorizeParams, FileRefreshTokenStore, OAuthConfig, OAuthFlow, OAuthTokens,
     RefreshTokenProvider, RefreshTokenStore, SerializedTokens, TokenCacheEntry, TokenStoreKey,

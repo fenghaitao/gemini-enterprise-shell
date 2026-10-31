@@ -51,6 +51,13 @@ impl TlsRoots {
     }
 }
 
+/// A `reqwest` client builder that also trusts the configured corporate CA bundle
+/// (`NBLM_CA_BUNDLE`, then `SSL_CERT_FILE`, then `REQUESTS_CA_BUNDLE`). Use it for any
+/// client created outside `NblmClient`, such as the user-OAuth token and refresh flow.
+pub fn http_client_builder() -> Result<ClientBuilder> {
+    Ok(TlsRoots::from_env()?.apply(reqwest::Client::builder()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +121,49 @@ mod tests {
             assert_eq!(roots.0.len(), 1);
         }
         assert!(TlsRoots::from_lookup(|_| None).unwrap().0.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod builder_tests {
+    use super::*;
+
+    const CA: &[u8] = include_bytes!("../tests/fixtures/tls/test-ca.pem");
+
+    /// Restores the CA environment variables after the test.
+    struct EnvGuard(Vec<(&'static str, Option<std::ffi::OsString>)>);
+    impl EnvGuard {
+        fn new() -> Self {
+            Self(
+                ["NBLM_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"]
+                    .into_iter()
+                    .map(|key| (key, std::env::var_os(key)))
+                    .collect(),
+            )
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn public_builder_uses_the_configured_bundle_and_fails_closed() {
+        let _guard = EnvGuard::new();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("ca.pem");
+        std::fs::write(&path, CA).unwrap();
+        std::env::set_var("NBLM_CA_BUNDLE", &path);
+        http_client_builder().unwrap().build().unwrap();
+        std::env::set_var("NBLM_CA_BUNDLE", directory.path().join("missing.pem"));
+        let error = http_client_builder().err().unwrap().to_string();
+        assert!(error.contains("NBLM_CA_BUNDLE"), "{error}");
     }
 }

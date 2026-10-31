@@ -179,7 +179,9 @@ fn oauth_error_to_py(err: OAuthError) -> PyErr {
 }
 
 fn build_http_client() -> PyResult<Arc<Client>> {
-    Client::builder()
+    // Trust the configured corporate CA bundle for token exchange and refresh too.
+    nblm_core::http_client_builder()
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to create HTTP client: {err}")))?
         .user_agent(concat!("nblm-python/", env!("CARGO_PKG_VERSION")))
         .build()
         .map(Arc::new)
