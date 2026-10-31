@@ -216,6 +216,8 @@ mod tests {
     }
 
     #[test]
+    // Mutates NBLM_OAUTH_DISABLE_BOOTSTRAP: must not overlap the other env-based tests.
+    #[serial]
     fn disable_flag_recognizes_truthy_values() {
         let _guard = EnvGuard::new("NBLM_OAUTH_DISABLE_BOOTSTRAP");
         for value in ["1", "true", "TRUE", "yes", "YES", "on", "ON"] {
