@@ -1,0 +1,53 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "gemini-chat"
+version = "0.1.0"
+description = "Python client for the official Gemini Enterprise assistant API (Discovery Engine v1)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = ["gemini", "gemini-enterprise", "google-cloud", "assistant"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0", "mypy>=1.0.0", "ruff>=0.1.0", "maturin>=1.0,<2.0"]
+
+[tool.maturin]
+module-name = "gemini_chat._native"
+manifest-path = "../../crates/gemini-chat-python/Cargo.toml"
+python-source = "src"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "gemini_chat._native"
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ANN", "ARG", "PIE", "BLE", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

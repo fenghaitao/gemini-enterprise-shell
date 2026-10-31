@@ -8,7 +8,13 @@ from typing import ClassVar
 
 import pytest
 
-from nblm import EnvTokenProvider, GeminiAssistResponse, GeminiEnterpriseClient, NblmError
+from gemini_chat import (
+    EnvTokenProvider,
+    GcloudTokenProvider,
+    GeminiAssistResponse,
+    GeminiChatError,
+    GeminiEnterpriseClient,
+)
 
 ENGINE = "projects/123/locations/us/collections/default_collection/engines/search"
 SESSION = f"{ENGINE}/sessions/456"
@@ -113,9 +119,9 @@ def server() -> Iterator[str]:
 
 
 def _client(monkeypatch: pytest.MonkeyPatch, server: str) -> GeminiEnterpriseClient:
-    monkeypatch.setenv("NBLM_GEMINI_TEST_TOKEN", "synthetic-token")
+    monkeypatch.setenv("GEMINI_CHAT_TEST_TOKEN", "synthetic-token")
     return GeminiEnterpriseClient(
-        EnvTokenProvider("NBLM_GEMINI_TEST_TOKEN"), "123", "search", "us", base_url=server
+        EnvTokenProvider("GEMINI_CHAT_TEST_TOKEN"), "123", "search", "us", base_url=server
     )
 
 
@@ -160,7 +166,7 @@ def test_no_grounding_is_explicit(monkeypatch: pytest.MonkeyPatch, server: str) 
 
 def test_skipped_small_talk_explains_why(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
     _Handler.skipped = True
-    with pytest.raises(NblmError, match="ignores greetings") as exc:
+    with pytest.raises(GeminiChatError, match="ignores greetings") as exc:
         _client(monkeypatch, server).ask("Hello")
     assert getattr(exc.value, "skipped_reasons", None) == ["NON_ASSIST_SEEKING_QUERY_IGNORED"]
     assert getattr(exc.value, "session", "unset") is None
@@ -173,7 +179,7 @@ def test_errors_have_no_retry_or_fallback(
     monkeypatch: pytest.MonkeyPatch, server: str, status: int
 ) -> None:
     _Handler.status = status
-    with pytest.raises(NblmError, match="do not automatically repeat") as exc:
+    with pytest.raises(GeminiChatError, match="do not automatically repeat") as exc:
         _client(monkeypatch, server).ask("q", session_id="456", model_id="gemini-4-argon")
     assert getattr(exc.value, "session", None) == SESSION
     assert getattr(exc.value, "do_not_retry", False) is True
@@ -189,9 +195,19 @@ def test_validation_is_local_and_timeout_values_never_panic(
         "../bad",
         "projects/999/locations/us/collections/default_collection/engines/search/sessions/456",
     ]:
-        with pytest.raises(NblmError, match="invalid enterprise session"):
+        with pytest.raises(GeminiChatError, match="invalid enterprise session"):
             client.ask("q", session_id=session)
     for timeout in [float("nan"), float("inf"), -1.0, 0.0]:
-        with pytest.raises((ValueError, NblmError), match="positive"):
+        with pytest.raises((ValueError, GeminiChatError), match="positive"):
             GeminiEnterpriseClient(EnvTokenProvider(), "123", "search", timeout_secs=timeout)
     assert _Handler.requests == []
+
+
+def test_public_api_and_token_providers_are_independent_of_nblm() -> None:
+    import sys
+
+    assert EnvTokenProvider().key == "GEMINI_CHAT_ACCESS_TOKEN"
+    assert GcloudTokenProvider().binary == "gcloud"
+    with pytest.raises(TypeError, match="token_provider"):
+        GeminiEnterpriseClient(object(), "123", "search")  # type: ignore[arg-type]
+    assert "nblm" not in sys.modules
