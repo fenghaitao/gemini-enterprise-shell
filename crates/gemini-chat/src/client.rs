@@ -299,6 +299,9 @@ impl GeminiEnterpriseClient {
         // Each grounding block with the coordinate bases its offsets may be relative to.
         let mut pending_grounding: Vec<(TextGroundingMetadata, Vec<OffsetBase>)> = Vec::new();
         let mut last_grounding_end = 0;
+        // Per-connector auth failures are not fatal: the assistant may still answer from
+        // other sources. Only their count is kept; the payload may contain private details.
+        let mut connector_auth_failures = 0usize;
         let mut tools = Vec::new();
         let mut terminal = None;
         let mut skipped_reasons: Vec<String> = Vec::new();
@@ -312,9 +315,10 @@ impl GeminiEnterpriseClient {
                 }
                 session = Some(canonical);
             }
-            if frame.error.is_some() || !frame.connector_auth_errors.is_empty() {
+            connector_auth_failures += frame.connector_auth_errors.len();
+            if frame.error.is_some() {
                 return Err(assist_error(
-                    "native API or connector authentication error",
+                    with_connector_hint("native API error", connector_auth_failures),
                     session,
                 ));
             }
@@ -375,10 +379,16 @@ impl GeminiEnterpriseClient {
             });
         }
         let Some((state, Some(name))) = terminal else {
-            return Err(assist_error("missing named terminal answer", session));
+            return Err(assist_error(
+                with_connector_hint("missing named terminal answer", connector_auth_failures),
+                session,
+            ));
         };
         if state != "SUCCEEDED" {
-            return Err(assist_error(format!("terminal state {state}"), session));
+            return Err(assist_error(
+                with_connector_hint(&format!("terminal state {state}"), connector_auth_failures),
+                session,
+            ));
         }
         let Some(session) = session else {
             return Err(assist_error("missing session resource", None));
@@ -425,6 +435,11 @@ impl GeminiEnterpriseClient {
             grounding.push(metadata);
         }
         let mut warnings = Vec::new();
+        if connector_auth_failures > 0 {
+            warnings.push(format!(
+                "{connector_auth_failures} connector authentication error(s) reported; results from those sources may be missing. Re-authorize the connector in Gemini Enterprise if needed."
+            ));
+        }
         if !grounding.iter().any(|g| !g.references.is_empty()) {
             warnings.push("No native grounding references returned; citations written in answer text are not structured citations.".into());
         }
@@ -507,6 +522,14 @@ fn shift_segment(segment: &mut Value, base: usize) {
         } else {
             Value::from(shifted)
         };
+    }
+}
+
+fn with_connector_hint(reason: &str, connector_auth_failures: usize) -> String {
+    if connector_auth_failures == 0 {
+        reason.to_string()
+    } else {
+        format!("{reason} ({connector_auth_failures} connector authentication error(s) were also reported)")
     }
 }
 

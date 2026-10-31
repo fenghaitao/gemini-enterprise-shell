@@ -173,11 +173,6 @@ fn partial_failed_skipped_unknown_or_mismatched_results_never_succeed() {
     let mut f = original.clone();
     f.as_array_mut().unwrap().push(original[0].clone());
     assert!(parse(f).is_err());
-    let mut f = original.clone();
-    f[2]["connectorAuthErrors"] = json!([{"error":"private-details"}]);
-    let error = parse(f).unwrap_err().to_string();
-    assert!(error.contains("do not automatically repeat"));
-    assert!(!error.contains("private-details"));
     let mut f = original;
     f[2]["error"] = json!({"message":"sensitive"});
     assert!(parse(f).is_err());
@@ -380,4 +375,40 @@ fn grounding_offsets_valid_in_no_base_are_rejected() {
         grounded("Two.", json!([{"startIndex":"0","endIndex":"3","referenceIndices":[0],"text":"Six"}])),
     ]);
     assert!(parse(answer_frame(replies)).is_err());
+}
+
+#[test]
+fn connector_auth_errors_are_warnings_when_the_answer_succeeds() {
+    // One connector fails authentication; the assistant still completes from others.
+    let mut f = frames();
+    f[1]["connectorAuthErrors"] = json!([{"error":"private-details","dataStore":"secret-store"}]);
+    let r = parse(f).unwrap();
+    assert_eq!(r.answer, "答え evidence");
+    assert_eq!(r.native_reference_count(), 1);
+    let warning = r
+        .warnings
+        .iter()
+        .find(|w| w.contains("connector authentication"))
+        .expect("connector warning");
+    assert!(warning.starts_with("1 connector"), "{warning}");
+    assert!(!warning.contains("private-details") && !warning.contains("secret-store"));
+}
+
+#[test]
+fn connector_auth_errors_without_an_answer_explain_the_failure() {
+    let mut f = frames();
+    f[2]["connectorAuthErrors"] = json!([{"error":"private-details"}, {"error":"more"}]);
+    f[2]["answer"]["state"] = json!("FAILED");
+    let error = parse(f).unwrap_err().to_string();
+    assert!(
+        error.contains("2 connector authentication error(s)"),
+        "{error}"
+    );
+    assert!(error.contains("do not automatically repeat"));
+    assert!(!error.contains("private-details"));
+    // A native API error stays fatal even when the answer would otherwise succeed.
+    let mut f = frames();
+    f[2]["error"] = json!({"message":"sensitive"});
+    let error = parse(f).unwrap_err().to_string();
+    assert!(!error.contains("sensitive"));
 }
