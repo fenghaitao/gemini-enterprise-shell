@@ -6,8 +6,12 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from prompt_toolkit.history import History
 
 from . import __version__
 from .config import Config
@@ -42,6 +46,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--timeout", type=float, default=360.0, help="Ask timeout in seconds")
     p.add_argument("-c", "--command", action="append", help="Run a line and exit; repeatable")
+    p.add_argument(
+        "--no-history",
+        action="store_true",
+        help="Do not persist interactive prompt history",
+    )
     p.add_argument("--version", action="version", version=f"gesh {__version__}")
     return p.parse_args(argv)
 
@@ -97,13 +106,30 @@ def build_shell(config: Config, console: Console) -> Shell:
     return Shell(config, console, chat_factory=chat, notebook_factory=notebooks)
 
 
-def _interactive_loop(shell: Shell) -> None:
+def _prompt_history(enabled: bool) -> History:
+    from prompt_toolkit.history import FileHistory, InMemoryHistory
+
+    if not enabled:
+        return InMemoryHistory()
+
+    state = Path(
+        os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))
+    ) / "gesh"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    history_path = state / "history"
+    history_path.touch(mode=0o600, exist_ok=True)
+    # Do not rely on the caller's umask for Enterprise prompts. chmod is meaningful
+    # on POSIX; other platforms keep their native ACL semantics.
+    if os.name == "posix":
+        state.chmod(0o700)
+        history_path.chmod(0o600)
+    return FileHistory(str(history_path))
+
+
+def _interactive_loop(shell: Shell, *, history_enabled: bool = True) -> None:
     from prompt_toolkit import PromptSession
-    from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
 
-    state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "gesh"
-    state.mkdir(parents=True, exist_ok=True)
     bindings = KeyBindings()
 
     @bindings.add("escape", "enter")
@@ -111,7 +137,7 @@ def _interactive_loop(shell: Shell) -> None:
         event.current_buffer.insert_text("\n")  # type: ignore[attr-defined]
 
     session: PromptSession[str] = PromptSession(
-        history=FileHistory(str(state / "history")),
+        history=_prompt_history(history_enabled),
         key_bindings=bindings,
         bottom_toolbar=shell.toolbar,
     )
@@ -141,14 +167,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command:
         for line in args.command:
-            if not shell.handle(line):
+            keep_running = shell.handle(line)
+            if shell.last_command_failed:
+                return 1
+            if not keep_running:
                 break
         return 0
     if sys.stdin.isatty() and sys.stdout.isatty():
-        _interactive_loop(shell)
+        _interactive_loop(shell, history_enabled=not args.no_history)
     else:  # scripted: one line per command/question
         for line in sys.stdin:
-            if not shell.handle(line.rstrip("\n")):
+            keep_running = shell.handle(line.rstrip("\n"))
+            if shell.last_command_failed:
+                return 1
+            if not keep_running:
                 break
     if shell.pending is not None:
         console.print("An abandoned question is still running; exiting without waiting.")

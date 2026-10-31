@@ -60,6 +60,7 @@ class _Pending:
 
     question: str
     thread: threading.Thread
+    session_epoch: int
     result: dict[str, Any] = field(default_factory=dict)
 
 
@@ -96,6 +97,11 @@ class Shell:
         self.transcript: list[Turn] = []
         self.notebook_cache: list[Any] = []
         self.pending: _Pending | None = None
+        self.last_command_failed = False
+        # Incremented only by explicit user session changes (/new or /session ID).
+        # A late result from an abandoned request may update the active session only
+        # if the user has not changed session context in the meantime.
+        self._session_epoch = 0
 
     # ----------------------------------------------------------------- clients
     @property
@@ -136,6 +142,7 @@ class Shell:
 
     def handle(self, line: str) -> bool:
         """Process one input line. Returns False when the shell should exit."""
+        self.last_command_failed = False
         self.poll_pending()
         text = line.strip()
         if not text:
@@ -145,16 +152,20 @@ class Shell:
                 return self._command(text)
             self.ask(line.strip())
         except ShellError as err:
+            self.last_command_failed = True
             self.console.print(Text(f"error: {err}", style="red"))
         except _Abandoned:
+            self.last_command_failed = True
             self.console.print(
                 Text(
                     "Stopped waiting; the request may still complete on the server.", style="yellow"
                 )
             )
         except KeyboardInterrupt:
+            self.last_command_failed = True
             self.console.print(Text("interrupted", style="yellow"))
         except Exception as err:  # SDK errors (NblmError) and validation errors
+            self.last_command_failed = True
             self._report_error(err)
         return True
 
@@ -192,22 +203,34 @@ class Shell:
                 "an earlier question is still running; wait for its answer before asking again"
             )
         chat = self.chat
-        c = self.config
+        # Snapshot every request setting before the worker starts. After Ctrl-C the
+        # daemon thread can begin or finish later while the user edits shell state.
+        session_at_dispatch = self.session
+        model = self.config.model
+        data_stores = list(self.config.data_stores) or None
+        web_grounding = self.config.web_grounding
+        session_epoch = self._session_epoch
 
         def call() -> Any:
             return chat.ask(
                 question,
-                model_id=c.model,
-                session_id=self.session,
-                data_store_ids=list(c.data_stores) or None,
-                web_grounding=c.web_grounding,
+                model_id=model,
+                session_id=session_at_dispatch,
+                data_store_ids=data_stores,
+                web_grounding=web_grounding,
             )
 
         try:
             response = self._run(call, "Asking Gemini Enterprise")
         except _Abandoned as abandoned:
-            self.pending = _Pending(question, abandoned.thread, abandoned.result)
-            where = f" in session {render.short_id(self.session)}" if self.session else ""
+            self.pending = _Pending(
+                question, abandoned.thread, session_epoch, abandoned.result
+            )
+            where = (
+                f" in session {render.short_id(session_at_dispatch)}"
+                if session_at_dispatch
+                else ""
+            )
             self.console.print(
                 Text(
                     f"Stopped waiting. The server may still record this turn{where}; "
@@ -218,8 +241,9 @@ class Shell:
             return
         self._accept(question, response)
 
-    def _accept(self, question: str, response: Any) -> None:
-        self.session = response.session
+    def _accept(self, question: str, response: Any, *, adopt_session: bool = True) -> None:
+        if adopt_session:
+            self.session = response.session
         self.last = response
         self.transcript.append(
             Turn(
@@ -238,12 +262,26 @@ class Shell:
             return
         self.pending = None
         self.console.print(Text(f"Late result for: {pending.question}", style="bold yellow"))
+        adopt_session = pending.session_epoch == self._session_epoch
         if "error" in pending.result:
-            self._report_error(pending.result["error"])
+            self._report_error(pending.result["error"], adopt_session=adopt_session)
         elif "value" in pending.result:
-            self._accept(pending.question, pending.result["value"])
+            self._accept(
+                pending.question,
+                pending.result["value"],
+                adopt_session=adopt_session,
+            )
+        if not adopt_session:
+            self.console.print(
+                Text(
+                    "Active session unchanged because you switched session context while "
+                    "that request was still running.",
+                    style="dim",
+                )
+            )
 
     def cmd_new(self, args: list[str]) -> None:
+        self._session_epoch += 1
         self.session = None
         self.last = None
         self.console.print("New session starts with your next question.")
@@ -256,6 +294,7 @@ class Shell:
                 self.console.print("No session yet; the next question creates one.")
             return
         session = self._run(lambda: self.chat.get_session(args[0]), "Reading session")
+        self._session_epoch += 1
         self.session = session.get("name") or args[0]
         self.last = None
         render.render_session(self.console, session)
@@ -446,9 +485,9 @@ class Shell:
         return None
 
     # ----------------------------------------------------------------- helpers
-    def _report_error(self, err: BaseException) -> None:
+    def _report_error(self, err: BaseException, *, adopt_session: bool = True) -> None:
         session = getattr(err, "session", None)
-        if session:
+        if session and adopt_session:
             self.session = session
         self.console.print(Text(f"error: {err}", style="red"))
         if getattr(err, "do_not_retry", False):

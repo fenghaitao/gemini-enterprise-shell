@@ -50,6 +50,7 @@ nblm environment works as is.
 | `--web-grounding` | | Public web grounding (needs assistant support) |
 | `--session-id` | | Continue an existing session |
 | `--auth gcloud\|env` | `env`: `GEMINI_CHAT_ACCESS_TOKEN` (chat), `NBLM_ACCESS_TOKEN` (notebooks) | Token source (default `gcloud`) |
+| `--no-history` | | Do not persist interactive prompt history |
 
 Behind an HTTPS-inspecting proxy, the SDKs trust the CA bundle in `SSL_CERT_FILE` or
 `REQUESTS_CA_BUNDLE` (or `NBLM_CA_BUNDLE` / `GEMINI_CHAT_CA_BUNDLE` per SDK).
@@ -71,7 +72,9 @@ gesh[16059694688619672760]> In one sentence: which die is the CBB parent?
 ```
 
 The bottom bar shows engine, model, datastores and session. Enter sends; Esc+Enter (or
-Alt+Enter) inserts a newline. History is kept in `~/.local/state/gesh/history`.
+Alt+Enter) inserts a newline. By default, history is kept in
+`~/.local/state/gesh/history`; on POSIX the directory/file are forced to `0700`/`0600`.
+Use `--no-history` when prompts should not be persisted.
 
 ### Chat commands
 
@@ -102,7 +105,8 @@ Also `/config`, `/help`, `/quit` (or Ctrl-D).
 
 ### Scripting
 
-Non-interactive input is read line by line, and `-c` runs given lines:
+Non-interactive input is read line by line, and `-c` runs given lines. The first failed
+command stops the script and returns a nonzero exit status:
 
 ```bash
 printf '/nb list 5\n/quit\n' | uv run gesh
