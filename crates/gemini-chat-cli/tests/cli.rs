@@ -142,3 +142,57 @@ async fn invalid_session_is_rejected_without_network() {
         .failure();
     assert!(server.received_requests().await.unwrap().is_empty());
 }
+#[tokio::test]
+async fn closed_stdout_exits_quietly_without_panicking() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/{ENGINE}/sessions/456")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"name":format!("{ENGINE}/sessions/456"),"turns":[]}))
+                // Give the test time to close the pipe before any output is written.
+                .set_delay(std::time::Duration::from_millis(500)),
+        )
+        .mount(&server)
+        .await;
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("gemini-chat"));
+    for (key, _) in std::env::vars() {
+        if key.starts_with("GEMINI_CHAT_") {
+            cmd.env_remove(key);
+        }
+    }
+    let base = format!("{}/v1", server.uri());
+    let mut child = cmd
+        .env("GEMINI_CHAT_ACCESS_TOKEN", "DUMMY_TOKEN")
+        .args([
+            "--project-number",
+            "123456",
+            "--location",
+            "us",
+            "--auth",
+            "env",
+            "--base-url",
+            &base,
+            "--engine-id",
+            "search",
+            "session",
+            "--session-id",
+            "456",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take()); // the reader goes away, like `| head` exiting early
+    let output = tokio::task::spawn_blocking(move || child.wait_with_output().unwrap())
+        .await
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "status {:?}, stderr: {stderr}",
+        output.status
+    );
+    assert!(!stderr.contains("panicked"), "stderr: {stderr}");
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
