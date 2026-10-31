@@ -148,6 +148,14 @@ How it works:
 3. Every search result and every answer reference is re-checked locally against the
    folder (host, then path, case-insensitive, ignoring `?web=1`). Anything outside
    fails the call instead of being dropped silently.
+4. Each answer reference must also be one of the files sent **in this turn** (same
+   document resource, or the same normalized URL when the reference has no resource).
+   A citation of any other file, even one inside the folder, fails the call.
+
+The contract per turn: retrieval and references are limited to this turn's search
+results. In a multi-turn session the model also sees the earlier turns, so wording may
+build on earlier answers; those were folder-scoped too, but their files are not
+re-checked as this turn's references.
 
 Folder URLs: paste the browser address of the folder, with or without a trailing slash,
 with literal or `%20` spaces, or the library view (`…/Forms/AllItems.aspx?id=/sites/…`).

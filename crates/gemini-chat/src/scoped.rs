@@ -11,8 +11,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use std::collections::HashSet;
+
 use super::{bounded_body, http_reason, GeminiEnterpriseClient};
-use crate::sharepoint::{validate_search_terms, SharePointFolder};
+use crate::sharepoint::{normalized_uri, validate_search_terms, SharePointFolder};
 use crate::{Error, Result};
 
 /// The Search API returns at most 100 results per call and does not page further.
@@ -251,6 +253,7 @@ impl GeminiEnterpriseClient {
 
         let mut sources = Vec::new();
         let mut results = Vec::new();
+        let mut allowed = AllowedSources::default();
         for hit in &found.hits {
             let (key, content, full_text) = match (&hit.content, &hit.snippet) {
                 (Some(text), _) if !text.trim().is_empty() => ("documentContexts", text, true),
@@ -268,6 +271,7 @@ impl GeminiEnterpriseClient {
             }
             info[key] = json!([{"content": content}]);
             results.push(json!({"unstructuredDocumentInfo": info}));
+            allowed.add(&hit.document, hit.uri.as_deref());
             sources.push(AnswerSource {
                 title: hit.title.clone(),
                 uri: hit.uri.clone(),
@@ -296,26 +300,22 @@ impl GeminiEnterpriseClient {
             "answerGenerationSpec": {"includeCitations": true, "ignoreLowRelevantContent": false},
         });
         let bytes = self.post_serving_config("answer", &body, "answer").await?;
-        let mut answer = parse_folder_answer(&bytes, &request.folder)?;
-        // The session must be ours (and the requested one when continuing), and the answer
-        // must belong to it.
-        let canonical = self
-            .session_resource(&answer.session)
-            .map_err(|_| Error::Api("invalid returned session resource".into()))?;
-        if canonical != answer.session
-            || requested_session
-                .as_ref()
-                .is_some_and(|requested| requested != &canonical)
-        {
-            return Err(Error::Api("returned session resource mismatch".into()));
-        }
-        let answer_id = answer
-            .answer_resource
-            .strip_prefix(&format!("{canonical}/answers/"))
-            .unwrap_or("");
-        if answer_id.is_empty() || answer_id.contains('/') {
-            return Err(Error::Api("returned answer resource mismatch".into()));
-        }
+        // The session must be ours (and the requested one when continuing). Checked before
+        // any skip/failure is reported, so errors only ever carry a validated session.
+        let check_session = |returned: &str| -> Result<String> {
+            let canonical = self
+                .session_resource(returned)
+                .map_err(|_| Error::Api("invalid returned session resource".into()))?;
+            if canonical != returned
+                || requested_session
+                    .as_ref()
+                    .is_some_and(|requested| requested != &canonical)
+            {
+                return Err(Error::Api("returned session resource mismatch".into()));
+            }
+            Ok(canonical)
+        };
+        let mut answer = parse_folder_answer(&bytes, &request.folder, &allowed, &check_session)?;
         answer.search_query = found.query;
         answer.sources = sources;
         answer.warnings.extend(found.warnings);
@@ -362,10 +362,49 @@ impl GeminiEnterpriseClient {
     }
 }
 
-fn parse_folder_answer(bytes: &[u8], folder: &SharePointFolder) -> Result<FolderAnswer> {
+/// The files supplied to one Answer call. References must be one of these: by document
+/// resource when the reference names one, otherwise by normalized URI.
+#[derive(Default)]
+struct AllowedSources {
+    documents: HashSet<String>,
+    uris: HashSet<String>,
+}
+
+impl AllowedSources {
+    fn add(&mut self, document: &str, uri: Option<&str>) {
+        if !document.is_empty() {
+            self.documents.insert(document.to_string());
+        }
+        if let Some(uri) = uri.and_then(normalized_uri) {
+            self.uris.insert(uri);
+        }
+    }
+
+    fn permits(&self, reference: &AnswerReference) -> bool {
+        match reference.document.as_deref().filter(|d| !d.is_empty()) {
+            Some(document) => self.documents.contains(document),
+            None => reference
+                .uri
+                .as_deref()
+                .and_then(normalized_uri)
+                .is_some_and(|uri| self.uris.contains(&uri)),
+        }
+    }
+}
+
+fn parse_folder_answer(
+    bytes: &[u8],
+    folder: &SharePointFolder,
+    allowed: &AllowedSources,
+    check_session: &dyn Fn(&str) -> Result<String>,
+) -> Result<FolderAnswer> {
     let wire: AnswerWire = serde_json::from_slice(bytes)
         .map_err(|_| Error::Api("invalid answer response JSON/schema".into()))?;
-    let session = wire.session.and_then(|s| s.name);
+    let session = wire
+        .session
+        .and_then(|s| s.name)
+        .map(|name| check_session(&name))
+        .transpose()?;
     let answer = wire
         .answer
         .ok_or_else(|| Error::Api("answer response has no answer".into()))?;
@@ -389,6 +428,12 @@ fn parse_folder_answer(bytes: &[u8], folder: &SharePointFolder) -> Result<Folder
     let answer_resource = answer
         .name
         .ok_or_else(|| Error::Api("answer response has no answer name".into()))?;
+    let answer_id = answer_resource
+        .strip_prefix(&format!("{session}/answers/"))
+        .unwrap_or("");
+    if answer_id.is_empty() || answer_id.contains('/') {
+        return Err(Error::Api("returned answer resource mismatch".into()));
+    }
     let text = answer.answer_text.unwrap_or_default();
     if text.trim().is_empty() {
         return Err(Error::Api("no textual answer".into()));
@@ -404,6 +449,13 @@ fn parse_folder_answer(bytes: &[u8], folder: &SharePointFolder) -> Result<Folder
     {
         return Err(Error::Api(
             "answer cited a file outside the SharePoint folder; refusing the answer".into(),
+        ));
+    }
+    // Stronger than the folder check: only this turn's search results may be cited.
+    if !references.iter().all(|r| allowed.permits(r)) {
+        return Err(Error::Api(
+            "answer cited a file that was not among this turn's search results; refusing the answer"
+                .into(),
         ));
     }
     let mut citations = Vec::new();
@@ -544,7 +596,8 @@ impl From<SearchResultWire> for SearchHit {
             title: field("title"),
             uri: field("url"),
             file_type: field("file_type"),
-            content: field("content"),
+            // An empty `content` is no full text.
+            content: field("content").filter(|c| !c.trim().is_empty()),
             snippet: field("description").map(|d| clean_snippet(&d)),
             document: doc.name,
         }

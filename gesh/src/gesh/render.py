@@ -187,8 +187,8 @@ def render_folder_answer(console: Console, answer: dict[str, Any]) -> None:
     full = sum(1 for s in sources if s.get("full_text"))
     console.print(
         Text(
-            f"folder-scoped · {len(sources)} files ({full} full text) · "
-            f"session {short_id(answer.get('session'))}",
+            f"folder {folder_name(answer.get('folder') or '')} · {len(sources)} files "
+            f"({full} full text) · session {short_id(answer.get('session'))}",
             style="dim",
         )
     )

@@ -126,6 +126,21 @@ impl SharePointFolder {
     }
 }
 
+/// Comparable form of a result URL: lower-cased host and decoded, lower-cased path,
+/// without query or fragment (`?web=1`). `None` if it is not a usable URL.
+pub(crate) fn normalized_uri(uri: &str) -> Option<String> {
+    let url = Url::parse(uri.trim()).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    let path = percent_decode_str(url.path()).decode_utf8().ok()?;
+    if has_dot_segment(&path) {
+        return None;
+    }
+    Some(format!(
+        "{host}{}",
+        path.trim_end_matches('/').to_lowercase()
+    ))
+}
+
 fn has_dot_segment(path: &str) -> bool {
     path.split('/')
         .any(|segment| segment == "." || segment == "..")

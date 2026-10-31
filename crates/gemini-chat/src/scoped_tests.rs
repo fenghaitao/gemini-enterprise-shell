@@ -363,11 +363,14 @@ fn answer_with_citation(citation: Value) -> Vec<u8> {
 #[test]
 fn citation_offsets_are_parsed_strictly() {
     let folder = folder();
+    let allowed = allowed_a();
     let ok = parse_folder_answer(
         &answer_with_citation(
             json!({"startIndex": "2", "endIndex": 7, "sources": [{"referenceId": "0"}]}),
         ),
         &folder,
+        &allowed,
+        &same_session,
     )
     .unwrap();
     assert_eq!(
@@ -384,7 +387,13 @@ fn citation_offsets_are_parsed_strictly() {
         json!({"endIndex": "3", "sources": [{"referenceId": "1"}]}),
     ] {
         assert!(
-            parse_folder_answer(&answer_with_citation(bad.clone()), &folder).is_err(),
+            parse_folder_answer(
+                &answer_with_citation(bad.clone()),
+                &folder,
+                &allowed,
+                &same_session
+            )
+            .is_err(),
             "{bad}"
         );
     }
@@ -495,4 +504,136 @@ fn folder_answer_turns_survive_session_readback() {
         round_trip["detailedAnswer"]["answerText"],
         "Alpha says sync works."
     );
+}
+
+fn same_session(name: &str) -> Result<String> {
+    Ok(name.to_string())
+}
+
+fn allowed_a() -> AllowedSources {
+    let mut allowed = AllowedSources::default();
+    allowed.add(
+        &format!("{STORE}/branches/0/documents/A"),
+        Some(&format!("{FOLDER}/a.txt?web=1")),
+    );
+    allowed
+}
+
+fn answer_citing(reference_meta: Value) -> Vec<u8> {
+    serde_json::to_vec(&json!({"session": {"name": SESSION}, "answer": {
+        "name": format!("{SESSION}/answers/1"), "state": "SUCCEEDED", "answerText": "Answer.",
+        "citations": [{"endIndex": "6", "sources": [{"referenceId": "0"}]}],
+        "references": [{"chunkInfo": {"content": "x", "documentMetadata": reference_meta}}]
+    }}))
+    .unwrap()
+}
+
+#[test]
+fn references_must_come_from_this_turns_search_results() {
+    let (folder, allowed) = (folder(), allowed_a());
+    let parse =
+        |meta: Value| parse_folder_answer(&answer_citing(meta), &folder, &allowed, &same_session);
+    // Supplied document (by resource) passes.
+    assert!(parse(json!({"document": format!("{STORE}/branches/0/documents/A"), "uri": format!("{FOLDER}/a.txt")})).is_ok());
+    // No document resource: normalized URI fallback (case, encoding and ?web=1 ignored).
+    assert!(parse(json!({"uri": format!("{FOLDER}/A.TXT")})).is_ok());
+    // In the folder but not supplied this turn: refused, by document and by URI.
+    for meta in [
+        json!({"document": format!("{STORE}/branches/0/documents/Z"), "uri": format!("{FOLDER}/a.txt")}),
+        json!({"uri": format!("{FOLDER}/z.txt")}),
+    ] {
+        let error = parse(meta.clone()).unwrap_err().to_string();
+        assert!(
+            error.contains("not among this turn's search results"),
+            "{meta}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn folder_answer_rejects_an_in_folder_file_that_was_not_supplied() {
+    let server = MockServer::start().await;
+    mount_search(&server, search_response()).await;
+    let mut response = answer_response(&format!("{FOLDER}/other/Z-9999.txt"));
+    response["answer"]["references"][0]["chunkInfo"]["documentMetadata"]["document"] =
+        json!(format!("{STORE}/branches/0/documents/Z-9999"));
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:answer"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(&server)
+        .await;
+    let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+    request.data_stores = vec!["sp_file".into()];
+    let error = client(&server)
+        .await
+        .answer_in_folder(request)
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("not among this turn's search results"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
+    let foreign =
+        "projects/123/locations/us/collections/default_collection/engines/search/sessions/999";
+    for answer in [
+        json!({"state": "SUCCEEDED", "answerSkippedReasons": ["OUT_OF_DOMAIN_QUERY_IGNORED"]}),
+        json!({"state": "FAILED"}),
+    ] {
+        let server = MockServer::start().await;
+        mount_search(&server, search_response()).await;
+        Mock::given(method("POST"))
+            .and(path(format!(
+                "/v1/{ENGINE}/servingConfigs/default_search:answer"
+            )))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"session": {"name": foreign}, "answer": answer})),
+            )
+            .mount(&server)
+            .await;
+        let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+        request.data_stores = vec!["sp_file".into()];
+        request.session = Some("77".into()); // continuing a different session
+        match client(&server).await.answer_in_folder(request).await {
+            Err(Error::Api(reason)) => assert!(reason.contains("mismatch"), "{reason}"),
+            other => panic!("expected a session mismatch, got {other:?}"),
+        }
+    }
+    // A matching session is attached to the skip as before.
+    let server = MockServer::start().await;
+    mount_search(&server, search_response()).await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/{ENGINE}/servingConfigs/default_search:answer")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"session": {"name": SESSION},
+            "answer": {"state": "SUCCEEDED", "answerSkippedReasons": ["OUT_OF_DOMAIN_QUERY_IGNORED"]}})))
+        .mount(&server)
+        .await;
+    let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+    request.data_stores = vec!["sp_file".into()];
+    request.session = Some("77".into());
+    match client(&server).await.answer_in_folder(request).await {
+        Err(Error::Skipped { session, .. }) => assert_eq!(session.as_deref(), Some(SESSION)),
+        other => panic!("expected Skipped, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn empty_content_is_not_counted_as_full_text() {
+    let server = MockServer::start().await;
+    let mut response = search_response();
+    response["results"][0]["document"]["structData"]["content"] = json!("   ");
+    mount_search(&server, response).await;
+    let mut request = SearchRequest::new("sync");
+    request.folder = Some(folder());
+    request.data_stores = vec!["sp_file".into()];
+    let results = client(&server).await.search(request).await.unwrap();
+    assert_eq!(results.hits[0].content, None);
 }

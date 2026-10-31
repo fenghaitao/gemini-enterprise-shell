@@ -72,6 +72,8 @@ class _Pending:
     session_epoch: int
     result: dict[str, Any] = field(default_factory=dict)
     folder_scoped: bool = False
+    folder: str | None = None
+    search_terms: str | None = None
 
 
 @dataclass
@@ -81,6 +83,9 @@ class Turn:
     session: str
     sources: list[dict[str, str]]
     warnings: list[str]
+    folder: str | None = None  # folder answers: the folder they were scoped to
+    search_terms: str | None = None
+    stale: bool = False  # arrived after the folder or folder session changed
 
 
 class Shell:
@@ -323,6 +328,8 @@ class Shell:
                 folder_epoch,
                 abandoned.result,
                 folder_scoped=True,
+                folder=folder,
+                search_terms=terms,
             )
             self.console.print(
                 Text(
@@ -345,15 +352,43 @@ class Shell:
             err.gesh_folder_scoped = True  # type: ignore[attr-defined]
 
     def _accept_folder(
-        self, question: str, answer: dict[str, Any], *, adopt_session: bool = True
+        self,
+        question: str,
+        answer: dict[str, Any],
+        *,
+        adopt_session: bool = True,
+        terms: str | None = None,
     ) -> None:
-        if adopt_session and answer.get("session"):
-            self.folder_session = answer["session"]
-        self.last_folder_answer = answer
-        self.last = None
+        folder = answer.get("folder") or self.config.sharepoint_folder
+        terms = terms or self.config.search_terms
+        stale = not adopt_session
+        if stale:
+            # From before a folder change or /new: show where it came from, keep it in the
+            # transcript, but don't make it the current answer (/refs) or session.
+            self.console.print(
+                Text(
+                    f"Late result from folder {render.folder_name(folder or '')} "
+                    f"(terms: {terms or '-'}), not the current folder session:",
+                    style="bold yellow",
+                )
+            )
+        else:
+            if answer.get("session"):
+                self.folder_session = answer["session"]
+            self.last_folder_answer = answer
+            self.last = None
         sources = render.folder_sources(answer)
         self.transcript.append(
-            Turn(question, answer["answer"], "folder", sources, list(answer.get("warnings", [])))
+            Turn(
+                question,
+                answer["answer"],
+                answer.get("session") or "folder",
+                sources,
+                list(answer.get("warnings", [])),
+                folder=folder,
+                search_terms=terms,
+                stale=stale,
+            )
         )
         render.render_folder_answer(self.console, answer)
 
@@ -369,7 +404,12 @@ class Shell:
                 self._adopt_folder_error(pending.result["error"], adopt=adopt)
                 self._report_error(pending.result["error"], adopt_session=False)
             elif "value" in pending.result:
-                self._accept_folder(pending.question, pending.result["value"], adopt_session=adopt)
+                self._accept_folder(
+                    pending.question,
+                    pending.result["value"],
+                    adopt_session=adopt,
+                    terms=pending.search_terms,
+                )
             if not adopt:
                 self.console.print(
                     Text(
@@ -410,6 +450,9 @@ class Shell:
         self.console.print("New session starts with your next question.")
 
     def cmd_session(self, args: list[str]) -> None:
+        if self.config.sharepoint_folder:
+            self._cmd_folder_session(args)
+            return
         if not args:
             if self.session:
                 self.console.print(f"Current session: {self.session}")
@@ -422,6 +465,25 @@ class Shell:
         self.last = None
         render.render_session(self.console, session)
         self.console.print(Text("Continuing this session.", style="dim"))
+
+    def _cmd_folder_session(self, args: list[str]) -> None:
+        if not args:
+            if self.folder_session:
+                self.console.print(f"Current folder session: {self.folder_session}")
+            else:
+                self.console.print("No folder session yet; the next question creates one.")
+            return
+        session = self._run(lambda: self.chat.get_session(args[0]), "Reading session")
+        self._folder_epoch += 1
+        self.folder_session = session.get("name") or args[0]
+        self.last_folder_answer = None
+        render.render_session(self.console, session)
+        self.console.print(
+            Text(
+                "Continuing this folder session; each question still searches the folder.",
+                style="dim",
+            )
+        )
 
     def cmd_history(self, args: list[str]) -> None:
         session_id = self.folder_session if self.config.sharepoint_folder else self.session
@@ -546,11 +608,14 @@ class Shell:
         path = Path(args[0]).expanduser()
         lines = ["# gesh transcript", ""]
         for turn in self.transcript:
-            where = (
-                "folder-scoped"
-                if turn.session == "folder"
-                else f"session {render.short_id(turn.session)}"
-            )
+            if turn.folder:
+                where = (
+                    f"folder-scoped: {turn.folder} · terms {turn.search_terms or '-'}"
+                    f" · session {render.short_id(turn.session)}"
+                    + (" · late result" if turn.stale else "")
+                )
+            else:
+                where = f"session {render.short_id(turn.session)}"
             lines += [f"## {turn.question}", "", f"_{where}_", ""]
             lines += [turn.answer, ""]
             if turn.sources:
