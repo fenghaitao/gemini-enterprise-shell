@@ -1,5 +1,10 @@
 //! `gemini-chat`: chat with the official Gemini Enterprise assistant (Discovery Engine v1).
-use std::{process::ExitCode, sync::Arc, time::Duration};
+use std::{
+    io::{self, Write},
+    process::ExitCode,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -112,6 +117,8 @@ struct SessionArgs {
 async fn main() -> ExitCode {
     match run(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
+        // The reader went away (e.g. `gemini-chat ... | head`): stop quietly, like other CLIs.
+        Err(err) if is_broken_pipe(&err) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("Error: {err:#}");
             ExitCode::FAILURE
@@ -156,49 +163,63 @@ async fn run(cli: Cli) -> Result<()> {
             let session = client
                 .get_session(&args.session_id, args.include_answer_details)
                 .await?;
-            if global.json {
-                println!("{}", serde_json::to_string_pretty(&session)?);
-            } else {
-                println!("Session: {}", session.name);
+            let mut out = io::stdout().lock();
+            if !global.json {
+                writeln!(out, "Session: {}", session.name)?;
                 for (i, turn) in session.turns.iter().enumerate() {
-                    println!(
+                    writeln!(
+                        out,
                         "Turn {} model: {}",
                         i + 1,
                         turn.model_id().unwrap_or("not reported")
-                    );
+                    )?;
                 }
-                println!("{}", serde_json::to_string_pretty(&session)?);
             }
+            writeln!(out, "{}", serde_json::to_string_pretty(&session)?)?;
+            out.flush()?;
         }
     }
     Ok(())
 }
 
 fn emit_answer(response: &AssistResponse, json_mode: bool) -> Result<()> {
+    let mut out = io::stdout().lock();
     if json_mode {
-        println!("{}", serde_json::to_string_pretty(response)?);
+        writeln!(out, "{}", serde_json::to_string_pretty(response)?)?;
     } else {
-        println!("{}\n\nSession: {}", response.answer, response.session);
+        writeln!(out, "{}\n\nSession: {}", response.answer, response.session)?;
         if let Some(model) = &response.requested_model {
-            println!("Requested model: {model}");
+            writeln!(out, "Requested model: {model}")?;
         }
-        println!(
+        writeln!(
+            out,
             "Native grounding references: {}",
             response.native_reference_count()
-        );
+        )?;
         for (batch, metadata) in response.grounding.iter().enumerate() {
             for (index, reference) in metadata.references.iter().enumerate() {
                 let meta = &reference.document_metadata;
-                println!(
+                writeln!(
+                    out,
                     "  [{batch}:{index}] {} — {}",
                     meta.title.as_deref().unwrap_or("untitled"),
                     meta.uri.as_deref().unwrap_or("URI not provided")
-                );
+                )?;
             }
         }
     }
+    out.flush()?;
+    drop(out);
     for warning in &response.warnings {
         eprintln!("Warning: {warning}");
     }
     Ok(())
+}
+
+fn is_broken_pipe(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<io::Error>()
+            .is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe)
+    })
 }
