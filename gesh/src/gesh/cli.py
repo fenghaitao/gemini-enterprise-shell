@@ -36,6 +36,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Retrieval datastore; repeatable [DATA_STORE_ID or comma-separated DATA_STORE_IDS]",
     )
     p.add_argument("--web-grounding", action="store_true", help="Enable public web grounding")
+    p.add_argument(
+        "--sharepoint-folder",
+        help="Answer only from files in this SharePoint folder [SHAREPOINT_FOLDER]",
+    )
+    p.add_argument("--search-terms", help="Keywords that find files in the folder [SEARCH_TERMS]")
     p.add_argument("--session-id", help="Continue an existing assistant session")
     p.add_argument(
         "--auth",
@@ -57,7 +62,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def build_config(args: argparse.Namespace) -> Config:
     config = Config.from_env()
-    for attr in ("project_number", "location", "endpoint_location", "engine_id", "model"):
+    for attr in (
+        "project_number",
+        "location",
+        "endpoint_location",
+        "engine_id",
+        "model",
+        "sharepoint_folder",
+        "search_terms",
+    ):
         value = getattr(args, attr)
         if value:
             setattr(config, attr, value)
