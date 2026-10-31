@@ -50,6 +50,16 @@ export NBLM_DEBUG_HTTP=1
 !!! warning "Sensitive data"
     The full response payload can contain sensitive information. Only enable debug logging in trusted environments and disable it once you finish troubleshooting.
 
+### Corporate CA Bundle
+
+Behind an HTTPS-inspecting proxy, requests fail with `invalid peer certificate: UnknownIssuer` unless the proxy's CA is trusted. Point the client at a PEM CA bundle before constructing it or invoking the CLI:
+
+```bash
+export NBLM_CA_BUNDLE=/path/to/your/organization-ca-bundle.pem
+```
+
+Precedence is **`NBLM_CA_BUNDLE` → `SSL_CERT_FILE` → `REQUESTS_CA_BUNDLE`** (first nonempty value wins), so an environment that already sets `SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` works without changes. An unreadable, malformed or empty selected bundle fails closed; it is not silently replaced by a lower-priority variable. The bundle adds trust roots to the NotebookLM and token-info clients. Certificate and hostname verification stay enabled and built-in roots remain available.
+
 ### CLI
 
 ```bash
