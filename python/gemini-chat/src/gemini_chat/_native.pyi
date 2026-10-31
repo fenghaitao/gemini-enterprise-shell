@@ -26,6 +26,10 @@ class EnvTokenProvider:
 
 TokenProvider = GcloudTokenProvider | EnvTokenProvider
 
+def normalize_sharepoint_folder(url: str) -> str:
+    """Normalized folder URL (spaces as %20, no trailing slash, library views resolved);
+    raises GeminiChatError for unusable URLs such as sharing links."""
+
 class GeminiEnterpriseClient:
     def __init__(
         self,
@@ -62,7 +66,8 @@ class GeminiEnterpriseClient:
         page_size: int = 10,
     ) -> dict[str, Any]:
         """Search without generating: {query, hits[{document, title, uri, file_type,
-        content, snippet}], warnings}. With a folder, results are restricted to it."""
+        content, snippet}], total_size, more_results, warnings}. With a folder (which
+        requires data_store_ids), results are restricted to it."""
     def answer_in_folder(
         self,
         question: str,

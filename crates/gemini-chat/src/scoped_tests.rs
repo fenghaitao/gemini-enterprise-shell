@@ -120,6 +120,7 @@ async fn search_fails_closed_on_any_result_outside_the_folder() {
     mount_search(&server, response).await;
     let mut request = SearchRequest::new("sync");
     request.folder = Some(folder());
+    request.data_stores = vec!["sp_file".into()];
     let error = client(&server).await.search(request).await.unwrap_err();
     assert!(
         error.to_string().contains("outside the SharePoint folder"),
@@ -299,4 +300,88 @@ fn snippet_highlight_markup_is_removed_but_other_text_is_kept() {
         "a b c d"
     );
     assert_eq!(clean_snippet("x < y <b>z</b>"), "x < y <b>z</b>");
+}
+
+#[tokio::test]
+async fn folder_search_requires_an_explicit_datastore() {
+    let server = MockServer::start().await;
+    let mut request = SearchRequest::new("sync");
+    request.folder = Some(folder());
+    let error = client(&server).await.search(request).await.unwrap_err();
+    assert!(
+        error.to_string().contains("needs at least one datastore"),
+        "{error}"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn pagination_signals_are_reported_even_below_the_page_size() {
+    let server = MockServer::start().await;
+    // Fewer hits than requested, but the service says there are more.
+    let mut response = search_response();
+    response["nextPageToken"] = json!("token");
+    mount_search(&server, response).await;
+    let mut request = SearchRequest::new("sync");
+    request.folder = Some(folder());
+    request.data_stores = vec!["sp_file".into()];
+    request.page_size = 10;
+    let results = client(&server).await.search(request.clone()).await.unwrap();
+    assert!(results.more_results);
+    assert!(results.warnings[0].contains("more files may match"));
+
+    server.reset().await;
+    let mut response = search_response();
+    response["totalSize"] = json!("7");
+    mount_search(&server, response).await;
+    let results = client(&server).await.search(request.clone()).await.unwrap();
+    assert_eq!(results.total_size, Some(7));
+    assert!(results.more_results);
+
+    server.reset().await;
+    mount_search(&server, search_response()).await; // totalSize 2, no token, 2 < 10
+    let results = client(&server).await.search(request).await.unwrap();
+    assert!(!results.more_results);
+    assert!(results.warnings.is_empty());
+}
+
+fn answer_with_citation(citation: Value) -> Vec<u8> {
+    serde_json::to_vec(&json!({"answer": {
+        "state": "SUCCEEDED",
+        "answerText": "Ä sync answer.",
+        "citations": [citation],
+        "references": [{"chunkInfo": {"content": "x",
+            "documentMetadata": {"uri": format!("{FOLDER}/a.txt"), "title": "A"}}}]
+    }}))
+    .unwrap()
+}
+
+#[test]
+fn citation_offsets_are_parsed_strictly() {
+    let folder = folder();
+    let ok = parse_folder_answer(
+        &answer_with_citation(
+            json!({"startIndex": "2", "endIndex": 7, "sources": [{"referenceId": "0"}]}),
+        ),
+        &folder,
+    )
+    .unwrap();
+    assert_eq!(
+        (ok.citations[0].start_index, ok.citations[0].end_index),
+        (Some(2), Some(7))
+    );
+    for bad in [
+        json!({"startIndex": "5", "endIndex": "999999", "sources": [{"referenceId": "0"}]}),
+        json!({"endIndex": "abc", "sources": [{"referenceId": "0"}]}),
+        json!({"startIndex": -1, "sources": [{"referenceId": "0"}]}),
+        json!({"startIndex": "7", "endIndex": "2", "sources": [{"referenceId": "0"}]}),
+        // Byte 1 is inside the two-byte "Ä".
+        json!({"startIndex": "1", "sources": [{"referenceId": "0"}]}),
+        json!({"endIndex": "3", "sources": [{"referenceId": "1"}]}),
+    ] {
+        assert!(
+            parse_folder_answer(&answer_with_citation(bad.clone()), &folder).is_err(),
+            "{bad}"
+        );
+    }
 }

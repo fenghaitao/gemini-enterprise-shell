@@ -78,7 +78,7 @@ impl SharePointFolder {
             }
         }
         let path = path.trim_end_matches('/');
-        if !path.starts_with('/') || path.len() < 2 || path.contains('"') {
+        if !path.starts_with('/') || path.len() < 2 || path.contains('"') || has_dot_segment(path) {
             return Err(Error::validation(
                 "SharePoint folder URL must point at a site, library or folder path",
             ));
@@ -116,10 +116,19 @@ impl SharePointFolder {
         let Ok(path) = percent_decode_str(url.path()).decode_utf8() else {
             return false;
         };
+        // `Url::parse` already resolves `..`/`%2e%2e`; reject any that survive decoding anyway.
+        if has_dot_segment(&path) {
+            return false;
+        }
         path.to_lowercase()
             .strip_prefix(&self.folder_key)
             .is_some_and(|rest| rest.starts_with('/') && rest.len() > 1)
     }
+}
+
+fn has_dot_segment(path: &str) -> bool {
+    path.split('/')
+        .any(|segment| segment == "." || segment == "..")
 }
 
 /// Search keywords to combine with a folder restriction. Rejects anything that could
@@ -208,6 +217,17 @@ mod tests {
         ] {
             assert!(folder.contains(inside), "{inside}");
         }
+        // Encoded dot segments must never escape the folder.
+        for escape in [
+            "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/%2e%2e/secret.txt",
+            "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/%2E%2E/x.txt",
+            "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/.%2e/x.txt",
+            "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/../x.txt",
+        ] {
+            assert!(!folder.contains(escape), "{escape}");
+        }
+        assert!(has_dot_segment("/sites/eng/Team/Specs/../x"));
+        assert!(!has_dot_segment("/sites/eng/Team/Specs/..x/a.b"));
         for outside in [
             "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs",
             "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs-old/a.txt",

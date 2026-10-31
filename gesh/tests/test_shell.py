@@ -474,3 +474,30 @@ def test_folder_flags_and_env_are_read(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.sharepoint_folder == FOLDER and config.search_terms == "env terms"
     config = build_config(parse_args(["--search-terms", "flag terms"]))
     assert config.search_terms == "flag terms"
+
+
+def test_folder_urls_are_validated_up_front_and_search_needs_a_datastore() -> None:
+    out = io.StringIO()
+
+    def normalize(url: str) -> str:
+        if "/:f:/" in url:
+            raise ValueError("sharing links cannot be resolved locally")
+        return url.replace(" ", "%20").rstrip("/")
+
+    chat = FakeChat()
+    shell = Shell(
+        Config(project_number="1", engine_id="eng"),
+        Console(file=out, width=120, color_system=None),
+        chat_factory=lambda: chat,
+        runner=sync_runner,
+        normalize_folder=normalize,
+    )
+    shell.handle("/folder https://example.sharepoint.com/:f:/s/eng/Eabc")
+    assert shell.last_command_failed and "invalid folder URL" in out.getvalue()
+    assert shell.config.sharepoint_folder is None
+    shell.handle("/folder https://example.sharepoint.com/sites/eng/Shared Documents/Specs/")
+    assert shell.config.sharepoint_folder == (
+        "https://example.sharepoint.com/sites/eng/Shared%20Documents/Specs"
+    )
+    shell.handle("/search alpha")
+    assert "needs a datastore" in out.getvalue() and chat.calls == []

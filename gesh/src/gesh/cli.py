@@ -116,7 +116,13 @@ def build_shell(config: Config, console: Console) -> Shell:
             config.notebook_endpoint_location,
         )
 
-    return Shell(config, console, chat_factory=chat, notebook_factory=notebooks)
+    return Shell(
+        config,
+        console,
+        chat_factory=chat,
+        notebook_factory=notebooks,
+        normalize_folder=gemini_chat.normalize_sharepoint_folder,
+    )
 
 
 def _prompt_history(enabled: bool) -> History:
