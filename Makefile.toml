@@ -44,6 +44,8 @@ args = [
     "--workspace",
     "--exclude",
     "nblm-python",
+    "--exclude",
+    "gemini-chat-python",
     "--all-targets",
     "--all-features",
     "--",
@@ -54,17 +56,17 @@ args = [
 [tasks.test]
 description = "Run test suite"
 command = "cargo"
-args = ["test", "--workspace", "--exclude", "nblm-python"]
+args = ["test", "--workspace", "--exclude", "nblm-python", "--exclude", "gemini-chat-python"]
 
 [tasks.check]
 dependencies = ["before-build"]
 command = "cargo"
-args = ["check", "--workspace", "--exclude", "nblm-python"]
+args = ["check", "--workspace", "--exclude", "nblm-python", "--exclude", "gemini-chat-python"]
 
 [tasks.build]
 dependencies = ["before-build"]
 command = "cargo"
-args = ["build", "--workspace", "--exclude", "nblm-python", "${@}"]
+args = ["build", "--workspace", "--exclude", "nblm-python", "--exclude", "gemini-chat-python", "${@}"]
 
 [tasks.install-cli]
 description = "Build and install/update the CLI from this checkout"
@@ -101,6 +103,8 @@ args = [
     "--all-features",
     "--exclude",
     "nblm-python",
+    "--exclude",
+    "gemini-chat-python",
     "--open",
 ]
 
@@ -122,6 +126,8 @@ args = [
     "--workspace",
     "--exclude",
     "nblm-python",
+    "--exclude",
+    "gemini-chat-python",
     "--all-targets",
     "--all-features",
     "--",
@@ -138,6 +144,8 @@ args = [
     "--workspace",
     "--exclude",
     "nblm-python",
+    "--exclude",
+    "gemini-chat-python",
     "--all-targets",
 ]
 

@@ -16,7 +16,6 @@ Python bindings for the NotebookLM Enterprise API, powered by Rust via PyO3.
 | **Notebooks**      | Create, list, delete                              | Available     |
 | **Sources**        | Add (web, text, video), upload files, get, delete | Available     |
 | **Audio Overview** | Create, delete                                    | Available     |
-| **Gemini Enterprise** | Official assistant, explicit models, retrieval and server sessions | Available via `GeminiEnterpriseClient` |
 | **Sharing**        | Share with users                                  | Not available |
 
 ## Installation
@@ -181,5 +180,5 @@ The Python SDK is powered by Rust, providing:
 - [API Reference](api-reference.md) - Explore all available methods
 - [Examples](notebooks.md) - See practical examples
 
-For the separate official assistant client (separate from `NblmClient`), see the
+For the separate Gemini Enterprise assistant client, use the `gemini_chat` package; see the
 [Gemini Enterprise CLI/Rust/Python guide](../guides/gemini-enterprise-chat.md).

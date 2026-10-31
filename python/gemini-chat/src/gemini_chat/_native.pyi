@@ -1,8 +1,30 @@
-"""Official Gemini Enterprise assistant, separate from the NotebookLM notebook API."""
+"""Official Gemini Enterprise assistant API (Discovery Engine v1), independent of NotebookLM."""
 
 from typing import Any
 
-from ._auth import TokenProvider
+class GeminiChatError(Exception):
+    """A request failed. `session`/`do_not_retry` are set after a dispatched generation
+    failed; `skipped_reasons` is set when the assistant skipped the question."""
+
+    session: str | None
+    do_not_retry: bool
+    skipped_reasons: list[str]
+
+class GcloudTokenProvider:
+    """Access tokens from `gcloud auth print-access-token`."""
+
+    def __init__(self, binary: str = "gcloud") -> None: ...
+    @property
+    def binary(self) -> str: ...
+
+class EnvTokenProvider:
+    """Access token from an environment variable."""
+
+    def __init__(self, key: str = "GEMINI_CHAT_ACCESS_TOKEN") -> None: ...
+    @property
+    def key(self) -> str: ...
+
+TokenProvider = GcloudTokenProvider | EnvTokenProvider
 
 class GeminiEnterpriseClient:
     def __init__(

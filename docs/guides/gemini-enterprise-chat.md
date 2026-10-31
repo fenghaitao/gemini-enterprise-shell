@@ -3,8 +3,8 @@
 `gemini-chat` talks to Gemini Enterprise's **official Discovery Engine v1
 assistant API**. It is independent of NotebookLM: the `gemini-chat` library crate
 and the `gemini-chat` command (crate `gemini-chat-cli`) do not depend on
-`nblm-core` or `nblm`. The Python bindings ship in the `nblm` package as
-`GeminiEnterpriseClient`, so one SDK covers both notebooks and chat.
+`nblm-core` or `nblm`. The Python bindings are a separate `gemini_chat` package (`python/gemini-chat`,
+built from `crates/gemini-chat-python`); it does not need `nblm`.
 
 Install the command from this checkout with `make install-chat`
 (`cargo install --path crates/gemini-chat-cli`).
@@ -126,10 +126,10 @@ let session = client.get_session(&result.session, false).await?;
 
 ## Python
 
-Rebuild the editable extension after Rust changes (`make py-build`):
+Build it from `python/gemini-chat` with `uv run --extra dev maturin develop`:
 
 ```python
-from nblm import GeminiEnterpriseClient, GcloudTokenProvider
+from gemini_chat import GeminiEnterpriseClient, GcloudTokenProvider
 
 client = GeminiEnterpriseClient(
     GcloudTokenProvider(),
@@ -191,7 +191,7 @@ shape. No network request happens during client construction.
   records.
 - No prompt, response body, thoughts, token, or cookie is logged by this client. JSON results and stored session details are sensitive
   content: keep them private and out of version control. Python post-dispatch
-  `NblmError` exposes `session` (when known) and `do_not_retry=True`.
+  `GeminiChatError` exposes `session` (when known) and `do_not_retry=True`.
 
 ## Tool boundaries
 
