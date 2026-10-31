@@ -112,9 +112,7 @@ def _prompt_history(enabled: bool) -> History:
     if not enabled:
         return InMemoryHistory()
 
-    state = Path(
-        os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))
-    ) / "gesh"
+    state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "gesh"
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
     history_path = state / "history"
     history_path.touch(mode=0o600, exist_ok=True)
