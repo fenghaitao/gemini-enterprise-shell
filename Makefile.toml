@@ -162,62 +162,145 @@ echo "  ./scripts/bump-version.sh 0.1.1"
 '''
 
 # ------------------------- Python -------------------------
-[tasks.py-fmt]
-description = "Format Python code with ruff"
+# Python: per-package tasks (nblm-py-*, chat-py-*) and aggregates (py-*) running both.
+
+[tasks.nblm-py-fmt]
+description = "Format Python code with ruff (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "ruff", "format", "src", "tests"]
 
-[tasks.py-fmt-check]
-description = "Check Python code formatting"
+[tasks.nblm-py-fmt-check]
+description = "Check Python code formatting (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "ruff", "format", "--check", "src", "tests"]
 
-[tasks.py-lint]
-description = "Lint Python code with ruff"
+[tasks.nblm-py-lint]
+description = "Lint Python code with ruff (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "ruff", "check", "src", "tests"]
 
-[tasks.py-lint-fix]
-description = "Lint and fix Python code with ruff"
+[tasks.nblm-py-lint-fix]
+description = "Lint and fix Python code with ruff (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "ruff", "check", "--fix", "src", "tests"]
 
-[tasks.py-type]
-description = "Run mypy type checking"
+[tasks.nblm-py-type]
+description = "Run mypy type checking (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "mypy", "src", "tests"]
 
-[tasks.py-test]
-description = "Run Python tests with pytest"
+[tasks.nblm-py-test]
+description = "Run Python tests with pytest (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "pytest", "tests", "-v"]
 
-[tasks.py-build]
-description = "Build Python package with maturin"
+[tasks.nblm-py-build]
+description = "Build the editable Python package with maturin (nblm, python/)"
 dependencies = ["py-setup"]
 command = "uv"
 args = ["@@split(UV_RUN_ARGS,;)", "maturin", "develop"]
 
+[tasks.chat-py-setup]
+private = true
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["sync", "--locked", "--extra", "dev"]
+
+[tasks.chat-py-fmt]
+description = "Format Python code with ruff (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "ruff", "format", "src", "tests"]
+
+[tasks.chat-py-fmt-check]
+description = "Check Python code formatting (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "ruff", "format", "--check", "src", "tests"]
+
+[tasks.chat-py-lint]
+description = "Lint Python code with ruff (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "ruff", "check", "src", "tests"]
+
+[tasks.chat-py-lint-fix]
+description = "Lint and fix Python code with ruff (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "ruff", "check", "--fix", "src", "tests"]
+
+[tasks.chat-py-type]
+description = "Run mypy type checking (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "mypy", "src", "tests"]
+
+[tasks.chat-py-test]
+description = "Run Python tests with pytest (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "pytest", "tests", "-v"]
+
+[tasks.chat-py-build]
+description = "Build the editable Python package with maturin (gemini_chat, python/gemini-chat)"
+dependencies = ["chat-py-setup"]
+cwd = "python/gemini-chat"
+command = "uv"
+args = ["run", "--locked", "--extra", "dev", "maturin", "develop"]
+
+[tasks.py-fmt]
+description = "Format Python code with ruff for both Python packages"
+dependencies = ["nblm-py-fmt", "chat-py-fmt"]
+
+[tasks.py-fmt-check]
+description = "Check Python code formatting for both Python packages"
+dependencies = ["nblm-py-fmt-check", "chat-py-fmt-check"]
+
+[tasks.py-lint]
+description = "Lint Python code with ruff for both Python packages"
+dependencies = ["nblm-py-lint", "chat-py-lint"]
+
+[tasks.py-lint-fix]
+description = "Lint and fix Python code with ruff for both Python packages"
+dependencies = ["nblm-py-lint-fix", "chat-py-lint-fix"]
+
+[tasks.py-type]
+description = "Run mypy type checking for both Python packages"
+dependencies = ["nblm-py-type", "chat-py-type"]
+
+[tasks.py-test]
+description = "Run Python tests with pytest for both Python packages"
+dependencies = ["nblm-py-test", "chat-py-test"]
+
+[tasks.py-build]
+description = "Build the editable Python package with maturin for both Python packages"
+dependencies = ["nblm-py-build", "chat-py-build"]
+
 [tasks.py-all]
-description = "Run all Python checks (fmt, lint, type, test)"
+description = "Run all Python checks (fmt, lint, type, build) for both packages"
 dependencies = ["py-fmt", "py-lint-fix", "py-type", "py-build"]
 
 [tasks.chat-py-ci]
 description = "Build and check the gemini_chat Python package (python/gemini-chat)"
-cwd = "python/gemini-chat"
-script = [
-    "uv sync --locked --extra dev",
-    "uv run --locked --extra dev maturin develop",
-    "uv run --locked --extra dev ruff format --check src tests",
-    "uv run --locked --extra dev ruff check src tests",
-    "uv run --locked --extra dev mypy src tests",
-    "uv run --locked --extra dev pytest -v",
+dependencies = [
+    "chat-py-build",
+    "chat-py-fmt-check",
+    "chat-py-lint",
+    "chat-py-type",
+    "chat-py-test",
 ]
 
 [tasks.gesh-ci]

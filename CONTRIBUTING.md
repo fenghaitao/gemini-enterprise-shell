@@ -71,12 +71,14 @@ make run ARGS="--help"        # Build incrementally and run from source
 make check                   # Check Rust core and CLI
 make test                    # Run Rust core and CLI tests
 make ci                      # Run Rust formatting, Clippy, and tests
-make py-build                # Rebuild the editable Python SDK after Rust changes
+make py-build                # Rebuild both editable Python SDKs after Rust changes
 ```
 
 `make install` calls `cargo make install-cli`, not `cargo make install` (which
 installs the pre-commit tooling and hooks). It installs the CLI only, not the
-Python SDK. `make py-build` uses the existing uv/maturin development workflow.
+Python SDK. `make py-build` uses the existing uv/maturin development workflow for both
+Python packages; `cargo make nblm-py-build` / `chat-py-build` build just one. Every
+`py-*` task has `nblm-py-*` and `chat-py-*` variants.
 
 ### 3. Make Your Changes
 

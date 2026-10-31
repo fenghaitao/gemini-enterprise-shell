@@ -70,16 +70,16 @@ jobs:
           tool: cargo-make
 
       - name: Build Python package
-        run: cargo make py-build
+        run: cargo make nblm-py-build
 
       - name: Format check
-        run: cargo make py-fmt-check
+        run: cargo make nblm-py-fmt-check
 
       - name: Lint
-        run: cargo make py-lint
+        run: cargo make nblm-py-lint
 
       - name: Type check
-        run: cargo make py-type
+        run: cargo make nblm-py-type
 
       - name: Run tests
-        run: cargo make py-test
+        run: cargo make nblm-py-test
