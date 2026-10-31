@@ -445,7 +445,7 @@ def test_folder_mode_answers_only_from_the_folder_without_touching_the_session(
     assert "folder answer to What does A say?" in text
     assert "Sources (1)" in text  # duplicate references collapse to one file
     folder_session = f"{ENGINE}/sessions/f1"
-    assert "folder-scoped · 1 files (1 full text) · session f1" in text
+    assert "folder Specs · 1 files (1 full text) · session f1" in text
     assert shell.folder_session == folder_session
     assert shell.session == f"{ENGINE}/sessions/9"  # chat session untouched
     assert "session f1" in shell.toolbar()
@@ -461,7 +461,7 @@ def test_folder_mode_answers_only_from_the_folder_without_touching_the_session(
     assert "Alpha chunk" in out.getvalue()
     target = tmp_path / "t.md"
     shell.handle(f"/save {target}")
-    assert "_folder-scoped_" in target.read_text()
+    assert "_folder-scoped: " + FOLDER + " · terms alpha sync · session f1_" in target.read_text()
     shell.handle("/folder off")
     shell.handle("back to chat")
     assert "folder" not in chat.calls[-1] and chat.calls[-1]["session_id"] == f"{ENGINE}/sessions/9"
@@ -552,3 +552,55 @@ def test_folder_answer_turns_render_in_history() -> None:
         },
     )
     assert "folder answer" in out.getvalue() and "folder reply" in out.getvalue()
+
+
+OTHER = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Other"
+
+
+def test_late_answer_from_a_previous_folder_is_marked_and_not_made_current(tmp_path: Any) -> None:
+    release = threading.Event()
+    result: dict[str, Any] = {}
+
+    def abandon_runner(func: Any, label: str) -> Any:
+        def target() -> None:
+            release.wait(5)
+            result["value"] = func()
+
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+        raise _Abandoned(thread, result)
+
+    shell, _, _, out = make_shell(runner=abandon_runner)
+    shell.handle(f"/folder {FOLDER}")
+    shell.handle("/terms alpha")
+    shell.handle("question for A")  # Ctrl-C: still running
+    assert shell.pending is not None and shell.pending.folder == FOLDER
+    shell._run = sync_runner
+    shell.handle(f"/folder {OTHER}")  # switch to folder B
+    release.set()
+    shell.pending.thread.join(5)
+    shell.handle("/config")  # polls the late result
+
+    text = out.getvalue()
+    assert "Late result from folder Specs (terms: alpha)" in text
+    assert shell.last_folder_answer is None  # /refs does not point at A's answer
+    assert shell.folder_session is None  # B's session untouched
+    turn = shell.transcript[-1]
+    assert turn.stale and turn.folder == FOLDER and turn.search_terms == "alpha"
+    target = tmp_path / "t.md"
+    shell.handle(f"/save {target}")
+    assert "late result" in target.read_text()
+
+
+def test_session_command_is_folder_aware() -> None:
+    shell, chat, _, out = make_shell()
+    shell.session = f"{ENGINE}/sessions/9"
+    shell.handle(f"/folder {FOLDER}")
+    shell.handle("/session")
+    assert "No folder session yet" in out.getvalue()
+    shell.handle("/session 55")
+    assert shell.folder_session == f"{ENGINE}/sessions/55"
+    assert shell.session == f"{ENGINE}/sessions/9"  # chat session untouched
+    shell.handle("/terms alpha")
+    shell.handle("follow-up")
+    assert chat.calls[-1]["session_id"] == f"{ENGINE}/sessions/55"
