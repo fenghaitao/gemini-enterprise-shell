@@ -83,6 +83,7 @@ enum Command {
     /// Ask once. Never retries generation or falls back to another model.
     Ask(AskArgs),
     /// Read a saved server session and its service-reported model metadata (no generation).
+    /// Prints a summary, or the full session with --json.
     Session(SessionArgs),
 }
 
@@ -164,18 +165,27 @@ async fn run(cli: Cli) -> Result<()> {
                 .get_session(&args.session_id, args.include_answer_details)
                 .await?;
             let mut out = io::stdout().lock();
-            if !global.json {
+            if global.json {
+                writeln!(out, "{}", serde_json::to_string_pretty(&session)?)?;
+            } else {
                 writeln!(out, "Session: {}", session.name)?;
+                if let Some(title) = &session.display_name {
+                    writeln!(out, "Title: {title}")?;
+                }
                 for (i, turn) in session.turns.iter().enumerate() {
+                    let query = turn.query.as_ref().map_or("", |q| q.text.as_str());
                     writeln!(
                         out,
-                        "Turn {} model: {}",
+                        "Turn {}: model {} | {}",
                         i + 1,
-                        turn.model_id().unwrap_or("not reported")
+                        turn.model_id().unwrap_or("not reported"),
+                        query
                     )?;
                 }
+                if args.include_answer_details {
+                    writeln!(out, "(answer details are included with --json)")?;
+                }
             }
-            writeln!(out, "{}", serde_json::to_string_pretty(&session)?)?;
             out.flush()?;
         }
     }
