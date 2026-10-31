@@ -90,6 +90,7 @@ class Shell:
         notebook_factory: Callable[[], Any] | None = None,
         confirm: Callable[[str], bool] | None = None,
         runner: Runner | None = None,
+        normalize_folder: Callable[[str], str] | None = None,
     ) -> None:
         self.config = config
         self.console = console
@@ -99,6 +100,8 @@ class Shell:
         self._notebooks: Any = None
         self._confirm = confirm or (lambda prompt: input(prompt).strip().lower() in {"y", "yes"})
         self._run: Runner = runner or self._run_in_thread
+        # Validates and normalizes /folder URLs up front (gemini_chat.normalize_sharepoint_folder).
+        self._normalize_folder = normalize_folder
         self.session: str | None = None
         self.last: Any = None
         # Last folder-scoped answer (a dict); /refs shows whichever answer came last.
@@ -425,7 +428,13 @@ class Shell:
             self.console.print("Folder scope off: questions use normal chat again.")
             return
         if args:
-            self.config.sharepoint_folder = " ".join(args)
+            folder = " ".join(args)
+            if self._normalize_folder is not None:
+                try:
+                    folder = self._normalize_folder(folder)
+                except Exception as err:  # GeminiChatError from the SDK
+                    raise ShellError(f"invalid folder URL: {err}") from None
+            self.config.sharepoint_folder = folder
         if self.config.sharepoint_folder:
             self.console.print(f"Folder: {self.config.sharepoint_folder}")
             self.console.print(
@@ -453,6 +462,8 @@ class Shell:
             raise ShellError("usage: /search TERMS (or set /terms first)")
         chat = self.chat
         folder = self.config.sharepoint_folder
+        if folder and not self.config.data_stores:
+            raise ShellError("a folder-scoped search needs a datastore: /ds add ID")
         data_stores = list(self.config.data_stores) or None
         results = self._run(
             lambda: chat.search(terms, sharepoint_folder=folder, data_store_ids=data_stores),

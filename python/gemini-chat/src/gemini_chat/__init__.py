@@ -6,6 +6,7 @@ from ._native import (
     GeminiAssistResponse,
     GeminiChatError,
     GeminiEnterpriseClient,
+    normalize_sharepoint_folder,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "GeminiAssistResponse",
     "GeminiChatError",
     "GeminiEnterpriseClient",
+    "normalize_sharepoint_folder",
 ]

@@ -59,6 +59,11 @@ pub struct SearchResults {
     /// The query sent, including the folder restriction.
     pub query: String,
     pub hits: Vec<SearchHit>,
+    /// `totalSize` as reported by the service, if any.
+    pub total_size: Option<u64>,
+    /// `true` when the service signals more matches than were returned (`nextPageToken`
+    /// or a larger `totalSize`), or the page came back full.
+    pub more_results: bool,
     pub warnings: Vec<String>,
 }
 
@@ -140,6 +145,13 @@ impl GeminiEnterpriseClient {
                 "search page size must be 1-{MAX_SEARCH_RESULTS}"
             )));
         }
+        if request.folder.is_some() && request.data_stores.is_empty() {
+            // Without explicit datastores the engine would fan the query out to all of its
+            // connectors before the local folder check could reject their results.
+            return Err(Error::validation(
+                "a folder-scoped search needs at least one datastore (the SharePoint file datastore)",
+            ));
+        }
         let query = match &request.folder {
             Some(folder) => format!("({terms}) {}", folder.kql()),
             None => terms.to_string(),
@@ -173,16 +185,28 @@ impl GeminiEnterpriseClient {
                 ));
             }
         }
+        // The service sets nextPageToken when the page is full (following it returns an
+        // empty page for federated SharePoint search), and totalSize when it knows more.
+        let more_results = wire
+            .next_page_token
+            .as_deref()
+            .is_some_and(|t| !t.is_empty())
+            || wire
+                .total_size
+                .is_some_and(|total| total > hits.len() as u64)
+            || hits.len() as u32 >= request.page_size;
         let mut warnings = Vec::new();
-        if hits.len() as u32 >= request.page_size {
+        if more_results {
             warnings.push(format!(
-                "Returned {} results, the requested limit; more files may match (at most {MAX_SEARCH_RESULTS} per search, no paging).",
+                "Returned {} results, but more files may match (the service reports more; this client does not page and a search returns at most {MAX_SEARCH_RESULTS}). Narrow the terms or raise the page size.",
                 hits.len()
             ));
         }
         Ok(SearchResults {
             query,
             hits,
+            total_size: wire.total_size,
+            more_results,
             warnings,
         })
     }
@@ -342,10 +366,12 @@ fn parse_folder_answer(bytes: &[u8], folder: &SharePointFolder) -> Result<Folder
             .map(|source| index(&source.reference_id).filter(|i| *i < references.len()))
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| Error::Api("answer citation references an unknown source".into()))?;
-        let start_index = citation.start_index.as_ref().and_then(index);
-        let end_index = citation.end_index.as_ref().and_then(index);
-        if start_index.or(end_index).is_some_and(|i| i > text.len()) {
-            return Err(Error::Api("answer citation offset is out of range".into()));
+        let start_index = strict_offset(citation.start_index.as_ref(), &text)?;
+        let end_index = strict_offset(citation.end_index.as_ref(), &text)?;
+        if let (Some(start), Some(end)) = (start_index, end_index) {
+            if start > end {
+                return Err(Error::Api("answer citation starts after it ends".into()));
+            }
         }
         citations.push(AnswerCitation {
             start_index,
@@ -366,6 +392,22 @@ fn parse_folder_answer(bytes: &[u8], folder: &SharePointFolder) -> Result<Folder
         sources: Vec::new(),
         warnings,
     })
+}
+
+/// A present citation offset must be a valid index ("269" or 269), within the answer
+/// and on a UTF-8 character boundary; malformed values fail instead of being dropped.
+fn strict_offset(value: Option<&Value>, text: &str) -> Result<Option<usize>> {
+    let Some(value) = value.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let offset =
+        index(value).ok_or_else(|| Error::Api("answer citation offset is malformed".into()))?;
+    if offset > text.len() || !text.is_char_boundary(offset) {
+        return Err(Error::Api(
+            "answer citation offset is out of range or not on a character boundary".into(),
+        ));
+    }
+    Ok(Some(offset))
 }
 
 /// Offsets and IDs arrive as decimal strings ("269") or numbers.
@@ -406,9 +448,23 @@ fn is_highlight_tag(tag: &str) -> bool {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SearchWire {
     #[serde(default)]
     results: Vec<SearchResultWire>,
+    #[serde(default, deserialize_with = "lenient_u64")]
+    total_size: Option<u64>,
+    next_page_token: Option<String>,
+}
+
+/// `totalSize` is an int32 in the schema but may be sent as a string.
+fn lenient_u64<'de, D: serde::Deserializer<'de>>(
+    de: D,
+) -> std::result::Result<Option<u64>, D::Error> {
+    let value = Option::<Value>::deserialize(de)?;
+    Ok(value
+        .as_ref()
+        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok())))
 }
 #[derive(Deserialize)]
 struct SearchResultWire {

@@ -350,3 +350,14 @@ async fn answer_uses_only_folder_files_and_prints_references() {
         .stderr(predicate::str::contains("must not contain path:"));
     assert_eq!(server.received_requests().await.unwrap().len(), before);
 }
+
+#[tokio::test]
+async fn folder_search_without_a_datastore_is_rejected_locally() {
+    let server = MockServer::start().await;
+    command(&server)
+        .args(["search", "--sharepoint-folder", FOLDER, "alpha"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs at least one datastore"));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}

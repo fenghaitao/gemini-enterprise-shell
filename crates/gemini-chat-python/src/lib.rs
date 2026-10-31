@@ -323,8 +323,18 @@ fn to_python(py: Python<'_>, value: &impl serde::Serialize) -> PyResult<Py<PyAny
         .unbind())
 }
 
+/// Normalize a SharePoint folder URL as used for folder scope (spaces as %20, no
+/// trailing slash, library views resolved); raises GeminiChatError if it is unusable.
+#[pyfunction]
+fn normalize_sharepoint_folder(url: &str) -> PyResult<String> {
+    SharePointFolder::parse(url)
+        .map(|folder| folder.url().to_string())
+        .map_err(map_error)
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(normalize_sharepoint_folder, m)?)?;
     m.add_class::<GeminiEnterpriseClient>()?;
     m.add_class::<GeminiAssistResponse>()?;
     m.add_class::<GcloudTokenProvider>()?;

@@ -14,6 +14,7 @@ from gemini_chat import (
     GeminiAssistResponse,
     GeminiChatError,
     GeminiEnterpriseClient,
+    normalize_sharepoint_folder,
 )
 
 ENGINE = "projects/123/locations/us/collections/default_collection/engines/search"
@@ -289,3 +290,16 @@ def test_folder_validation_is_local(monkeypatch: pytest.MonkeyPatch, server: str
     with pytest.raises(GeminiChatError, match="page size"):
         client.search("x", page_size=101)
     assert _Handler.requests == []
+
+
+def test_folder_search_requires_a_datastore_and_urls_normalize(
+    monkeypatch: pytest.MonkeyPatch, server: str
+) -> None:
+    client = _client(monkeypatch, server)
+    with pytest.raises(GeminiChatError, match="needs at least one datastore"):
+        client.search("alpha", sharepoint_folder=FOLDER)
+    assert _Handler.requests == []
+    spaced = FOLDER.replace("%20", " ") + "/"
+    assert normalize_sharepoint_folder(spaced) == FOLDER
+    with pytest.raises(GeminiChatError, match="sharing links"):
+        normalize_sharepoint_folder("https://example.sharepoint.com/:f:/s/eng/Eabc")
