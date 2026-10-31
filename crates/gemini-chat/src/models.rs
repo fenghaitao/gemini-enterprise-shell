@@ -105,8 +105,16 @@ pub struct AssistSessionTurn {
     pub query: Option<SessionQuery>,
     #[serde(default)]
     pub query_config: BTreeMap<String, String>,
+    /// Set for chat (streamAssist) turns.
     #[serde(default)]
     pub detailed_assist_answer: Option<Value>,
+    /// Answer resource of a folder-scoped (Answer API) turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    /// Full answer (text, citations, references) of a folder-scoped turn, with
+    /// `includeAnswerDetails`. Such turns have no `queryConfig`, so no `model_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detailed_answer: Option<Value>,
 }
 
 impl AssistSessionTurn {

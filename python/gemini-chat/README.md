@@ -20,7 +20,7 @@ print(answer.answer, answer.session, answer.warnings)
 ```
 
 Answers limited to one SharePoint folder (folder-scoped Search, then the Answer API
-with only those files; sessionless):
+with only those files):
 
 ```python
 folder = "https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs"
@@ -33,6 +33,10 @@ scoped = client.answer_in_folder(
     data_store_ids=["your-sharepoint-file-datastore"],
 )
 print(scoped["answer"], [r["uri"] for r in scoped["references"]], scoped["warnings"])
+follow_up = client.answer_in_folder(
+    "Shorten that.", search_terms="sync handshake", sharepoint_folder=folder,
+    data_store_ids=["your-sharepoint-file-datastore"], session_id=scoped["session"],
+)   # every turn searches the folder again
 ```
 
 Token providers: `GcloudTokenProvider()` (`gcloud auth print-access-token`) or

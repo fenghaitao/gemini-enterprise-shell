@@ -6,6 +6,7 @@ Generation is never retried: a failed or abandoned ask may still be recorded ser
 
 from __future__ import annotations
 
+import contextlib
 import shlex
 import threading
 import time
@@ -34,9 +35,11 @@ HELP = """\
   /refs                   Re-show the last answer's sources with snippets
   /save FILE              Save this shell's transcript as Markdown
 
-[bold]SharePoint folder scope (enforced by SharePoint; sessionless answers)[/bold]
-  /folder URL             Answer questions only from files in this folder
+[bold]SharePoint folder scope (enforced by SharePoint)[/bold]
+  /folder URL             Answer questions only from files in this folder (own session;
+                          follow-ups continue it, each turn searches the folder again)
   /folder off             Back to normal chat     /folder   show the current folder
+  /new, /history          In folder mode: start a new / read back the folder session
   /terms KEYWORDS         Keywords that find the files (every word must match)
   /search [TERMS]         List matching files (uses /folder; no generation)
 
@@ -106,6 +109,9 @@ class Shell:
         self.last: Any = None
         # Last folder-scoped answer (a dict); /refs shows whichever answer came last.
         self.last_folder_answer: dict[str, Any] | None = None
+        # Folder answers use their own server session, separate from the chat session.
+        self.folder_session: str | None = None
+        self._folder_epoch = 0  # bumped by /new (folder mode) and folder changes
         self.transcript: list[Turn] = []
         self.notebook_cache: list[Any] = []
         self.pending: _Pending | None = None
@@ -152,7 +158,11 @@ class Shell:
         if c.sharepoint_folder:
             terms = c.search_terms or "(set /terms)"
             folder = render.folder_name(c.sharepoint_folder)
-            return f" engine {c.engine_id or '-'} · ds {ds} · folder {folder} · terms {terms}"
+            sid = render.short_id(self.folder_session) if self.folder_session else "new"
+            return (
+                f" engine {c.engine_id or '-'} · ds {ds} · folder {folder} · terms {terms}"
+                f" · session {sid}"
+            )
         return (
             f" engine {c.engine_id or '-'} · model {c.model or 'default'} · ds {ds}{web}"
             f" · session {render.short_id(self.session) if self.session else 'new'}"
@@ -291,6 +301,8 @@ class Shell:
             raise ShellError("a folder-scoped answer needs a datastore: /ds add ID")
         chat = self.chat
         data_stores = list(self.config.data_stores)
+        session_at_dispatch = self.folder_session
+        folder_epoch = self._folder_epoch
 
         def call() -> Any:
             return chat.answer_in_folder(
@@ -298,6 +310,7 @@ class Shell:
                 search_terms=terms,
                 sharepoint_folder=folder,
                 data_store_ids=data_stores,
+                session_id=session_at_dispatch,
             )
 
         try:
@@ -307,7 +320,7 @@ class Shell:
             self.pending = _Pending(
                 question,
                 abandoned.thread,
-                self._session_epoch,
+                folder_epoch,
                 abandoned.result,
                 folder_scoped=True,
             )
@@ -318,9 +331,24 @@ class Shell:
                 )
             )
             return
+        except Exception as err:
+            # Errors may carry the folder session; never adopt it as the chat session.
+            self._adopt_folder_error(err, adopt=True)
+            raise
         self._accept_folder(question, answer)
 
-    def _accept_folder(self, question: str, answer: dict[str, Any]) -> None:
+    def _adopt_folder_error(self, err: BaseException, *, adopt: bool) -> None:
+        session = getattr(err, "session", None)
+        if session and adopt:
+            self.folder_session = session
+        with contextlib.suppress(AttributeError):
+            err.gesh_folder_scoped = True  # type: ignore[attr-defined]
+
+    def _accept_folder(
+        self, question: str, answer: dict[str, Any], *, adopt_session: bool = True
+    ) -> None:
+        if adopt_session and answer.get("session"):
+            self.folder_session = answer["session"]
         self.last_folder_answer = answer
         self.last = None
         sources = render.folder_sources(answer)
@@ -335,11 +363,21 @@ class Shell:
             return
         self.pending = None
         self.console.print(Text(f"Late result for: {pending.question}", style="bold yellow"))
-        if pending.folder_scoped:  # sessionless: nothing to adopt
+        if pending.folder_scoped:
+            adopt = pending.session_epoch == self._folder_epoch
             if "error" in pending.result:
+                self._adopt_folder_error(pending.result["error"], adopt=adopt)
                 self._report_error(pending.result["error"], adopt_session=False)
             elif "value" in pending.result:
-                self._accept_folder(pending.question, pending.result["value"])
+                self._accept_folder(pending.question, pending.result["value"], adopt_session=adopt)
+            if not adopt:
+                self.console.print(
+                    Text(
+                        "Folder session unchanged because you started a new one or changed "
+                        "the folder while that request was running.",
+                        style="dim",
+                    )
+                )
             return
         adopt_session = pending.session_epoch == self._session_epoch
         if "error" in pending.result:
@@ -360,6 +398,12 @@ class Shell:
             )
 
     def cmd_new(self, args: list[str]) -> None:
+        if self.config.sharepoint_folder:
+            self._folder_epoch += 1
+            self.folder_session = None
+            self.last_folder_answer = None
+            self.console.print("New folder session starts with your next question.")
+            return
         self._session_epoch += 1
         self.session = None
         self.last = None
@@ -380,9 +424,9 @@ class Shell:
         self.console.print(Text("Continuing this session.", style="dim"))
 
     def cmd_history(self, args: list[str]) -> None:
-        if not self.session:
+        session_id = self.folder_session if self.config.sharepoint_folder else self.session
+        if not session_id:
             raise ShellError("no session yet")
-        session_id = self.session
         session = self._run(
             lambda: self.chat.get_session(session_id, include_answer_details=True),
             "Reading session",
@@ -425,6 +469,8 @@ class Shell:
     def cmd_folder(self, args: list[str]) -> None:
         if args and args[0].lower() in {"off", "none", "-"}:
             self.config.sharepoint_folder = None
+            self._folder_epoch += 1
+            self.folder_session = None
             self.console.print("Folder scope off: questions use normal chat again.")
             return
         if args:
@@ -434,13 +480,17 @@ class Shell:
                     folder = self._normalize_folder(folder)
                 except Exception as err:  # GeminiChatError from the SDK
                     raise ShellError(f"invalid folder URL: {err}") from None
+            if folder != self.config.sharepoint_folder:
+                # A conversation stays within one folder.
+                self._folder_epoch += 1
+                self.folder_session = None
             self.config.sharepoint_folder = folder
         if self.config.sharepoint_folder:
             self.console.print(f"Folder: {self.config.sharepoint_folder}")
             self.console.print(
                 Text(
                     "Questions are answered only from matching files in this folder "
-                    "(sessionless; /folder off to return to chat).",
+                    "(own session; /folder off to return to chat).",
                     style="dim",
                 )
             )
@@ -630,7 +680,7 @@ class Shell:
     # ----------------------------------------------------------------- helpers
     def _report_error(self, err: BaseException, *, adopt_session: bool = True) -> None:
         session = getattr(err, "session", None)
-        if session and adopt_session:
+        if session and adopt_session and not getattr(err, "gesh_folder_scoped", False):
             self.session = session
         self.console.print(Text(f"error: {err}", style="red"))
         if getattr(err, "do_not_retry", False):

@@ -38,6 +38,7 @@ class FakeError(Exception):
 class FakeChat:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.history_calls: list[str] = []
         self.fail: Exception | None = None
 
     def ask(self, question: str, **kwargs: Any) -> FakeResponse:
@@ -58,8 +59,11 @@ class FakeChat:
     def answer_in_folder(self, question: str, **kwargs: Any) -> dict[str, Any]:
         self.calls.append({"question": question, "folder": True, **kwargs})
         folder = kwargs["sharepoint_folder"].rstrip("/")
+        session = kwargs.get("session_id") or f"{ENGINE}/sessions/f{len(self.calls)}"
         return {
             "answer": f"folder answer to {question}",
+            "session": session,
+            "answer_resource": f"{session}/answers/1",
             "folder": folder,
             "search_query": f'({kwargs["search_terms"]}) path:"{folder}"',
             "citations": [{"start_index": None, "end_index": 5, "reference_ids": [0]}],
@@ -80,6 +84,7 @@ class FakeChat:
         }
 
     def get_session(self, session_id: str, include_answer_details: bool = False) -> dict[str, Any]:
+        self.history_calls.append(session_id)
         return {
             "name": f"{ENGINE}/sessions/{session_id.rsplit('/', 1)[-1]}",
             "displayName": "demo",
@@ -439,8 +444,19 @@ def test_folder_mode_answers_only_from_the_folder_without_touching_the_session(
     text = out.getvalue()
     assert "folder answer to What does A say?" in text
     assert "Sources (1)" in text  # duplicate references collapse to one file
-    assert "folder-scoped · 1 files (1 full text) · no session" in text
-    assert shell.session == f"{ENGINE}/sessions/9"  # sessionless: chat session untouched
+    folder_session = f"{ENGINE}/sessions/f1"
+    assert "folder-scoped · 1 files (1 full text) · session f1" in text
+    assert shell.folder_session == folder_session
+    assert shell.session == f"{ENGINE}/sessions/9"  # chat session untouched
+    assert "session f1" in shell.toolbar()
+    # A follow-up continues the folder session and still sends the folder scope.
+    shell.handle("Shorten that.")
+    assert chat.calls[-1]["session_id"] == folder_session
+    assert chat.calls[-1]["sharepoint_folder"] == FOLDER
+    shell.handle("/new")
+    assert shell.folder_session is None and shell.session == f"{ENGINE}/sessions/9"
+    shell.handle("Fresh question.")
+    assert chat.calls[-1]["session_id"] is None
     shell.handle("/refs")
     assert "Alpha chunk" in out.getvalue()
     target = tmp_path / "t.md"
@@ -501,3 +517,38 @@ def test_folder_urls_are_validated_up_front_and_search_needs_a_datastore() -> No
     )
     shell.handle("/search alpha")
     assert "needs a datastore" in out.getvalue() and chat.calls == []
+
+
+def test_folder_session_resets_on_folder_change_and_history_reads_it() -> None:
+    shell, chat, _, out = make_shell()
+    shell.handle(f"/folder {FOLDER}")
+    shell.handle("/terms alpha")
+    shell.handle("q1")
+    first = shell.folder_session
+    assert first
+    shell.handle(f"/folder {FOLDER}")  # same folder: keep the conversation
+    assert shell.folder_session == first
+    shell.handle("/history")
+    assert chat.history_calls[-1] == first
+    shell.handle("/folder https://example.sharepoint.com/sites/eng/Shared%20Documents/Other")
+    assert shell.folder_session is None
+
+
+def test_folder_answer_turns_render_in_history() -> None:
+    from gesh.render import render_session
+
+    out = io.StringIO()
+    render_session(
+        Console(file=out, width=120, color_system=None),
+        {
+            "name": f"{ENGINE}/sessions/f1",
+            "turns": [
+                {
+                    "query": {"text": "q1"},
+                    "answer": "a/1",
+                    "detailedAnswer": {"answerText": "folder reply"},
+                }
+            ],
+        },
+    )
+    assert "folder answer" in out.getvalue() and "folder reply" in out.getvalue()

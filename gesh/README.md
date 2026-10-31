@@ -94,15 +94,19 @@ Use `--no-history` when prompts should not be persisted.
 
 Normal chat cannot be restricted to a folder. Folder mode answers only from files in one
 SharePoint folder, enforced by SharePoint: a folder-scoped search with your keywords,
-then an answer from just those files. These answers are sessionless and leave the chat
-session untouched.
+then an answer from just those files. Folder mode has its own server session, separate
+from the chat session: follow-up questions continue it (each turn searches the folder
+again, with the current `/terms`), `/new` starts a fresh one, `/history` reads it back,
+and changing the folder starts a new one.
 
 ```text
 gesh[new]> /folder https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs
 gesh[folder:Specs]> /terms sync handshake        # keywords: every word must match
 gesh[folder:Specs]> /search                       # list matching files (no generation)
 gesh[folder:Specs]> What does the spec say the handshake does?
-gesh[folder:Specs]> /folder off                   # back to normal chat
+gesh[folder:Specs]> /terms handshake root die     # keywords for the follow-up
+gesh[folder:Specs]> Shorten that, then say which die drives the ack.
+gesh[folder:Specs]> /folder off                   # back to normal chat (its session is kept)
 ```
 
 | Command | |

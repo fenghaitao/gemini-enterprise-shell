@@ -79,11 +79,14 @@ def render_session(console: Console, session: dict[str, Any]) -> None:
     for i, turn in enumerate(turns, 1):
         query = (turn.get("query") or {}).get("text") or ""
         config = turn.get("queryConfig") or {}
-        model = config.get(MODEL_KEY) or "default"
+        folder_turn = "detailedAnswer" in turn or ("answer" in turn and not config)
+        model = "folder answer" if folder_turn else f"model {config.get(MODEL_KEY) or 'default'}"
         console.print(Text(f"\n[{i}] you: ", style="bold cyan") + Text(query))
-        console.print(Text(f"    model {model}", style="dim"))
-        answer = turn.get("detailedAssistAnswer") or {}
-        text = _answer_text(answer)
+        console.print(Text(f"    {model}", style="dim"))
+        if folder_turn:
+            text = (turn.get("detailedAnswer") or {}).get("answerText") or ""
+        else:
+            text = _answer_text(turn.get("detailedAssistAnswer") or {})
         if text:
             console.print(Markdown(text))
 
@@ -184,7 +187,8 @@ def render_folder_answer(console: Console, answer: dict[str, Any]) -> None:
     full = sum(1 for s in sources if s.get("full_text"))
     console.print(
         Text(
-            f"folder-scoped · {len(sources)} files ({full} full text) · no session",
+            f"folder-scoped · {len(sources)} files ({full} full text) · "
+            f"session {short_id(answer.get('session'))}",
             style="dim",
         )
     )

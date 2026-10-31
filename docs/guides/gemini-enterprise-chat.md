@@ -121,12 +121,20 @@ gemini-chat --json search \
   --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
   sync handshake
 
-# Answer only from the matching files in that folder (one generation, sessionless).
+# Answer only from the matching files in that folder (one generation).
 gemini-chat answer \
   --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
   --search-terms 'sync handshake' \
   --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
   'In two sentences, what does the spec say the handshake does?'
+
+# Follow up in the same conversation: pass the printed Session. Give keywords for
+# this turn; the folder is searched again and only those files are sent.
+gemini-chat answer --session-id SESSION_ID \
+  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
+  --search-terms 'handshake root die' \
+  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
+  'Shorten your previous answer, then say which die drives the ack.'
 ```
 
 How it works:
@@ -154,9 +162,16 @@ Limits:
   warning says when the limit was reached.
 - Search returns full text for only about the top 5 files; the rest are sent as short
   snippets, and a warning reports how many.
-- `answer` is sessionless, has no `--model` option, and does not continue a
-  conversation. A question the Answer API declines (for example small talk) is reported
-  as skipped; if no file matches, the Answer API is not called at all.
+- Sessions: the first `answer` creates a server session (`Session:` in the output);
+  `--session-id` continues it, and the model sees the earlier turns. The folder scope is
+  **not stored in the session**: every turn runs its own folder-scoped search and sends
+  only those files, so give each follow-up its own `--search-terms` (shorthand questions
+  like "which die?" make poor keywords). Readback works with `gemini-chat session`;
+  these turns carry `detailedAnswer` and no `model_id`. Don't continue a chat (`ask`)
+  session with `answer` or the other way round; mixing them is untested.
+- `answer` has no `--model` option. A question the Answer API declines (for example
+  small talk) is reported as skipped; if no file matches, the Answer API is not called
+  at all.
 - This relies on the SharePoint connector being in **federated** (live search) mode. It
   needs the `discoveryengine.servingConfigs.search` and `.answer` permissions.
 - The strongest alternative is admin-side: a dedicated SharePoint connector whose Path
