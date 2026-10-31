@@ -90,6 +90,31 @@ Use `--no-history` when prompts should not be persisted.
 | `/refs` | Last answer's sources with snippets |
 | `/save FILE` | Save this shell's transcript as Markdown |
 
+### Folder-scoped answers (SharePoint)
+
+Normal chat cannot be restricted to a folder. Folder mode answers only from files in one
+SharePoint folder, enforced by SharePoint: a folder-scoped search with your keywords,
+then an answer from just those files. These answers are sessionless and leave the chat
+session untouched.
+
+```text
+gesh[new]> /folder https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs
+gesh[folder:Specs]> /terms sync handshake        # keywords: every word must match
+gesh[folder:Specs]> /search                       # list matching files (no generation)
+gesh[folder:Specs]> What does the spec say the handshake does?
+gesh[folder:Specs]> /folder off                   # back to normal chat
+```
+
+| Command | |
+|---|---|
+| `/folder URL`, `/folder off`, `/folder` | Set, clear or show the folder |
+| `/terms KEYWORDS`, `/terms off` | Keywords that find files in the folder |
+| `/search [TERMS]` | Matching files (in the folder if set), full text or snippet |
+
+Also `--sharepoint-folder` / `--search-terms` (or `GESH_SHAREPOINT_FOLDER` /
+`GESH_SEARCH_TERMS`). At most 100 files per search; only about 5 arrive with full text,
+which the answer's warnings report. A datastore (`/ds add`) is required.
+
 ### Notebook commands
 
 | Command | |

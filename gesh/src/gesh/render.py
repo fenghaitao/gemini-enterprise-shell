@@ -136,3 +136,87 @@ def sources_table(notebook: Any) -> Table:
             short_id(src.name),
         )
     return table
+
+
+def folder_name(url: str) -> str:
+    """Last path segment of a folder URL, decoded, for prompts and the toolbar."""
+    from urllib.parse import unquote, urlsplit
+
+    path = unquote(urlsplit(url.strip()).path).rstrip("/")
+    return path.rsplit("/", 1)[-1] or url
+
+
+def folder_sources(answer: dict[str, Any]) -> list[dict[str, str]]:
+    """Unique referenced files of a folder-scoped answer, in citation order."""
+    seen: set[str] = set()
+    out: list[dict[str, str]] = []
+    for ref in answer.get("references") or []:
+        key = ref.get("uri") or ref.get("document") or ""
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "title": ref.get("title") or "(untitled)",
+                "uri": ref.get("uri") or "",
+                "snippet": clean_snippet(ref.get("content") or ""),
+            }
+        )
+    return out
+
+
+def render_folder_answer(console: Console, answer: dict[str, Any]) -> None:
+    console.print(Markdown(answer.get("answer") or "_(empty answer)_"))
+    refs = folder_sources(answer)
+    if refs:
+        console.print()
+        console.print(Text(f"Sources ({len(refs)})", style="bold"))
+        for i, ref in enumerate(refs, 1):
+            line = Text(f" [{i}] ", style="cyan")
+            line.append(ref["title"], style="bold")
+            if ref["uri"]:
+                line.append("\n     ")
+                line.append(ref["uri"], style=f"link {ref['uri']} dim")
+            console.print(line)
+    for warning in answer.get("warnings") or []:
+        console.print(Text(f"! {warning}", style="yellow"))
+    sources = answer.get("sources") or []
+    full = sum(1 for s in sources if s.get("full_text"))
+    console.print(
+        Text(
+            f"folder-scoped · {len(sources)} files ({full} full text) · no session",
+            style="dim",
+        )
+    )
+
+
+def render_folder_references(console: Console, answer: dict[str, Any]) -> None:
+    refs = folder_sources(answer)
+    if not refs:
+        console.print("The last answer has no references.")
+        return
+    for i, ref in enumerate(refs, 1):
+        console.print(Text(f"[{i}] ", style="cyan") + Text(ref["title"], style="bold"))
+        if ref["uri"]:
+            console.print(Text("    " + ref["uri"], style="dim"))
+        if ref["snippet"]:
+            console.print(Text("    " + ref["snippet"][:400], style="italic"))
+
+
+def render_search(console: Console, results: dict[str, Any]) -> None:
+    hits = results.get("hits") or []
+    table = Table(header_style="bold", title=f"{len(hits)} file(s)")
+    table.add_column("#", justify="right", style="cyan")
+    table.add_column("Title")
+    table.add_column("Text")
+    table.add_column("URL", style="dim", overflow="fold")
+    for i, hit in enumerate(hits, 1):
+        table.add_row(
+            str(i),
+            hit.get("title") or "",
+            "full" if hit.get("content") else "snippet",
+            hit.get("uri") or "",
+        )
+    console.print(table)
+    for warning in results.get("warnings") or []:
+        console.print(Text(f"! {warning}", style="yellow"))

@@ -55,6 +55,30 @@ class FakeChat:
             requested_model=kwargs.get("model_id"),
         )
 
+    def answer_in_folder(self, question: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"question": question, "folder": True, **kwargs})
+        folder = kwargs["sharepoint_folder"].rstrip("/")
+        return {
+            "answer": f"folder answer to {question}",
+            "folder": folder,
+            "search_query": f'({kwargs["search_terms"]}) path:"{folder}"',
+            "citations": [{"start_index": None, "end_index": 5, "reference_ids": [0]}],
+            "references": [
+                {"title": "A-0001", "uri": f"{folder}/a.txt", "content": "<c0>Alpha</c0> chunk"},
+                {"title": "A-0001", "uri": f"{folder}/a.txt", "content": "dup"},
+            ],
+            "sources": [{"title": "A-0001", "uri": f"{folder}/a.txt", "full_text": True}],
+            "warnings": ["1 of 2 files were sent as short snippets only"],
+        }
+
+    def search(self, terms: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"search": terms, **kwargs})
+        return {
+            "query": terms,
+            "hits": [{"title": "A-0001", "uri": "u", "content": "x"}],
+            "warnings": [],
+        }
+
     def get_session(self, session_id: str, include_answer_details: bool = False) -> dict[str, Any]:
         return {
             "name": f"{ENGINE}/sessions/{session_id.rsplit('/', 1)[-1]}",
@@ -392,3 +416,61 @@ def test_history_is_private_and_can_be_disabled(
 
 def test_no_history_flag_is_parsed() -> None:
     assert parse_args(["--no-history"]).no_history is True
+
+
+FOLDER = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs"
+
+
+def test_folder_mode_answers_only_from_the_folder_without_touching_the_session(
+    tmp_path: Any,
+) -> None:
+    shell, chat, _, out = make_shell()
+    shell.session = f"{ENGINE}/sessions/9"
+    shell.handle(f"/folder {FOLDER}")
+    assert shell.prompt_label() == "gesh[folder:Specs]> "
+    shell.handle("What does A say?")
+    assert "set /terms" in out.getvalue() and shell.last_command_failed
+    shell.handle("/terms alpha sync")
+    assert "folder Specs" in shell.toolbar() and "terms alpha sync" in shell.toolbar()
+    shell.handle("What does A say?")
+    call = chat.calls[-1]
+    assert call["folder"] and call["search_terms"] == "alpha sync"
+    assert call["sharepoint_folder"] == FOLDER and call["data_store_ids"] == ["ds1"]
+    text = out.getvalue()
+    assert "folder answer to What does A say?" in text
+    assert "Sources (1)" in text  # duplicate references collapse to one file
+    assert "folder-scoped · 1 files (1 full text) · no session" in text
+    assert shell.session == f"{ENGINE}/sessions/9"  # sessionless: chat session untouched
+    shell.handle("/refs")
+    assert "Alpha chunk" in out.getvalue()
+    target = tmp_path / "t.md"
+    shell.handle(f"/save {target}")
+    assert "_folder-scoped_" in target.read_text()
+    shell.handle("/folder off")
+    shell.handle("back to chat")
+    assert "folder" not in chat.calls[-1] and chat.calls[-1]["session_id"] == f"{ENGINE}/sessions/9"
+
+
+def test_folder_mode_needs_a_datastore_and_search_uses_folder_and_terms() -> None:
+    shell, chat, _, out = make_shell()
+    shell.handle(f"/folder {FOLDER}")
+    shell.handle("/terms alpha")
+    shell.handle("/ds clear")
+    shell.handle("q?")
+    assert "needs a datastore" in out.getvalue()
+    shell.handle("/ds add ds1")
+    shell.handle("/search")
+    call = chat.calls[-1]
+    assert call["search"] == "alpha" and call["sharepoint_folder"] == FOLDER
+    assert "1 file(s)" in out.getvalue()
+    shell.handle("/search beta gamma")
+    assert chat.calls[-1]["search"] == "beta gamma"
+
+
+def test_folder_flags_and_env_are_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GESH_SHAREPOINT_FOLDER", FOLDER)
+    monkeypatch.setenv("GESH_SEARCH_TERMS", "env terms")
+    config = build_config(parse_args([]))
+    assert config.sharepoint_folder == FOLDER and config.search_terms == "env terms"
+    config = build_config(parse_args(["--search-terms", "flag terms"]))
+    assert config.search_terms == "flag terms"

@@ -33,6 +33,8 @@ class Config:
     model: str | None = None  # None = assistant default
     data_stores: list[str] = field(default_factory=list)
     web_grounding: bool = False
+    sharepoint_folder: str | None = None  # folder scope: answers only from this folder
+    search_terms: str | None = None  # keywords that find files in the folder
     timeout_secs: float = 360.0
     auth: str = "gcloud"  # "gcloud" or "env" (token in NBLM_ACCESS_TOKEN)
 
@@ -48,6 +50,8 @@ class Config:
             assistant_id=env("ASSISTANT_ID", "default_assistant") or "default_assistant",
             model=env("ENTERPRISE_MODEL"),
             data_stores=_split(env("DATA_STORE_IDS") or env("DATA_STORE_ID")),
+            sharepoint_folder=env("SHAREPOINT_FOLDER"),
+            search_terms=env("SEARCH_TERMS"),
         )
 
     @property

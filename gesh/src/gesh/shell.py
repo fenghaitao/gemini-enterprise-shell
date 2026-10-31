@@ -34,6 +34,12 @@ HELP = """\
   /refs                   Re-show the last answer's sources with snippets
   /save FILE              Save this shell's transcript as Markdown
 
+[bold]SharePoint folder scope (enforced by SharePoint; sessionless answers)[/bold]
+  /folder URL             Answer questions only from files in this folder
+  /folder off             Back to normal chat     /folder   show the current folder
+  /terms KEYWORDS         Keywords that find the files (every word must match)
+  /search [TERMS]         List matching files (uses /folder; no generation)
+
 [bold]Notebooks (NotebookLM Enterprise)[/bold]
   /nb list [N]            Recently viewed notebooks (numbered for later commands)
   /nb show NB             Sources of a notebook (NB = number from /nb list, or notebook ID)
@@ -62,6 +68,7 @@ class _Pending:
     thread: threading.Thread
     session_epoch: int
     result: dict[str, Any] = field(default_factory=dict)
+    folder_scoped: bool = False
 
 
 @dataclass
@@ -94,6 +101,8 @@ class Shell:
         self._run: Runner = runner or self._run_in_thread
         self.session: str | None = None
         self.last: Any = None
+        # Last folder-scoped answer (a dict); /refs shows whichever answer came last.
+        self.last_folder_answer: dict[str, Any] | None = None
         self.transcript: list[Turn] = []
         self.notebook_cache: list[Any] = []
         self.pending: _Pending | None = None
@@ -129,12 +138,18 @@ class Shell:
 
     # --------------------------------------------------------------- dispatch
     def prompt_label(self) -> str:
+        if self.config.sharepoint_folder:
+            return f"gesh[folder:{render.folder_name(self.config.sharepoint_folder)}]> "
         return f"gesh[{render.short_id(self.session) if self.session else 'new'}]> "
 
     def toolbar(self) -> str:
         c = self.config
         ds = ",".join(c.data_stores) if c.data_stores else "none"
         web = " · web" if c.web_grounding else ""
+        if c.sharepoint_folder:
+            terms = c.search_terms or "(set /terms)"
+            folder = render.folder_name(c.sharepoint_folder)
+            return f" engine {c.engine_id or '-'} · ds {ds} · folder {folder} · terms {terms}"
         return (
             f" engine {c.engine_id or '-'} · model {c.model or 'default'} · ds {ds}{web}"
             f" · session {render.short_id(self.session) if self.session else 'new'}"
@@ -190,6 +205,9 @@ class Shell:
             "/save": self.cmd_save,
             "/config": self.cmd_config,
             "/nb": self.cmd_nb,
+            "/folder": self.cmd_folder,
+            "/terms": self.cmd_terms,
+            "/search": self.cmd_search,
         }.get(cmd)
         if handler is None:
             raise ShellError(f"unknown command {cmd}; try /help")
@@ -202,6 +220,9 @@ class Shell:
             raise ShellError(
                 "an earlier question is still running; wait for its answer before asking again"
             )
+        if self.config.sharepoint_folder:
+            self._ask_in_folder(question)
+            return
         chat = self.chat
         # Snapshot every request setting before the worker starts. After Ctrl-C the
         # daemon thread can begin or finish later while the user edits shell state.
@@ -244,6 +265,7 @@ class Shell:
         if adopt_session:
             self.session = response.session
         self.last = response
+        self.last_folder_answer = None
         self.transcript.append(
             Turn(
                 question,
@@ -255,12 +277,67 @@ class Shell:
         )
         render.render_answer(self.console, response)
 
+    def _ask_in_folder(self, question: str) -> None:
+        folder, terms = self.config.sharepoint_folder, self.config.search_terms
+        if not terms:
+            raise ShellError(
+                "set /terms KEYWORDS first: in a folder, files are found by keywords "
+                "(every word must match), not by the question"
+            )
+        if not self.config.data_stores:
+            raise ShellError("a folder-scoped answer needs a datastore: /ds add ID")
+        chat = self.chat
+        data_stores = list(self.config.data_stores)
+
+        def call() -> Any:
+            return chat.answer_in_folder(
+                question,
+                search_terms=terms,
+                sharepoint_folder=folder,
+                data_store_ids=data_stores,
+            )
+
+        try:
+            answer = self._run(call, "Answering from the folder")
+        except _Abandoned as abandoned:
+            self.last_command_failed = True  # same as chat asks: scripts see a failure
+            self.pending = _Pending(
+                question,
+                abandoned.thread,
+                self._session_epoch,
+                abandoned.result,
+                folder_scoped=True,
+            )
+            self.console.print(
+                Text(
+                    "Stopped waiting; it is not resent. Its answer is shown here if it arrives.",
+                    style="yellow",
+                )
+            )
+            return
+        self._accept_folder(question, answer)
+
+    def _accept_folder(self, question: str, answer: dict[str, Any]) -> None:
+        self.last_folder_answer = answer
+        self.last = None
+        sources = render.folder_sources(answer)
+        self.transcript.append(
+            Turn(question, answer["answer"], "folder", sources, list(answer.get("warnings", [])))
+        )
+        render.render_folder_answer(self.console, answer)
+
     def poll_pending(self) -> None:
         pending = self.pending
         if pending is None or pending.thread.is_alive():
             return
         self.pending = None
         self.console.print(Text(f"Late result for: {pending.question}", style="bold yellow"))
+        if pending.folder_scoped:  # sessionless: nothing to adopt
+            if "error" in pending.result:
+                self._report_error(pending.result["error"], adopt_session=False)
+            elif "value" in pending.result:
+                self._accept_folder(pending.question, pending.result["value"])
+            return
         adopt_session = pending.session_epoch == self._session_epoch
         if "error" in pending.result:
             self._report_error(pending.result["error"], adopt_session=adopt_session)
@@ -342,7 +419,51 @@ class Shell:
             self.config.web_grounding = args[0].lower() == "on"
         self.console.print(f"Web grounding: {'on' if self.config.web_grounding else 'off'}")
 
+    def cmd_folder(self, args: list[str]) -> None:
+        if args and args[0].lower() in {"off", "none", "-"}:
+            self.config.sharepoint_folder = None
+            self.console.print("Folder scope off: questions use normal chat again.")
+            return
+        if args:
+            self.config.sharepoint_folder = " ".join(args)
+        if self.config.sharepoint_folder:
+            self.console.print(f"Folder: {self.config.sharepoint_folder}")
+            self.console.print(
+                Text(
+                    "Questions are answered only from matching files in this folder "
+                    "(sessionless; /folder off to return to chat).",
+                    style="dim",
+                )
+            )
+            if not self.config.search_terms:
+                self.console.print(Text("Next: /terms KEYWORDS", style="cyan"))
+        else:
+            self.console.print("No folder scope: questions use normal chat.")
+
+    def cmd_terms(self, args: list[str]) -> None:
+        if args and args[0].lower() in {"off", "none", "-"} and len(args) == 1:
+            self.config.search_terms = None
+        elif args:
+            self.config.search_terms = " ".join(args)
+        self.console.print(f"Search terms: {self.config.search_terms or 'none'}")
+
+    def cmd_search(self, args: list[str]) -> None:
+        terms = " ".join(args) or self.config.search_terms
+        if not terms:
+            raise ShellError("usage: /search TERMS (or set /terms first)")
+        chat = self.chat
+        folder = self.config.sharepoint_folder
+        data_stores = list(self.config.data_stores) or None
+        results = self._run(
+            lambda: chat.search(terms, sharepoint_folder=folder, data_store_ids=data_stores),
+            "Searching",
+        )
+        render.render_search(self.console, results)
+
     def cmd_refs(self, args: list[str]) -> None:
+        if self.last_folder_answer is not None:
+            render.render_folder_references(self.console, self.last_folder_answer)
+            return
         if self.last is None:
             raise ShellError("no answer yet")
         refs = render.citations(self.last.grounding)
@@ -364,7 +485,12 @@ class Shell:
         path = Path(args[0]).expanduser()
         lines = ["# gesh transcript", ""]
         for turn in self.transcript:
-            lines += [f"## {turn.question}", "", f"_session {render.short_id(turn.session)}_", ""]
+            where = (
+                "folder-scoped"
+                if turn.session == "folder"
+                else f"session {render.short_id(turn.session)}"
+            )
+            lines += [f"## {turn.question}", "", f"_{where}_", ""]
             lines += [turn.answer, ""]
             if turn.sources:
                 lines.append("Sources:")
@@ -389,6 +515,8 @@ class Shell:
             "model": c.model or "assistant default",
             "datastores": ", ".join(c.data_stores) or "none",
             "web grounding": "on" if c.web_grounding else "off",
+            "sharepoint folder": c.sharepoint_folder or "none",
+            "search terms": c.search_terms or "none",
             "auth": c.auth,
             "session": self.session or "new",
         }
