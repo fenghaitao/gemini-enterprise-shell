@@ -59,12 +59,12 @@ impl GeminiEnterpriseConfig {
         ] {
             validate_segment(value, name)?;
         }
-        if !self
-            .location
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        {
-            return Err(Error::validation("invalid enterprise location"));
+        if !SUPPORTED_LOCATIONS.contains(&self.location.as_str()) {
+            return Err(Error::validation(format!(
+                "unsupported enterprise location {:?}; use one of: {}",
+                self.location,
+                SUPPORTED_LOCATIONS.join(", ")
+            )));
         }
         if self.timeout.is_zero() {
             return Err(Error::validation("enterprise timeout must be positive"));
@@ -103,10 +103,7 @@ impl GeminiEnterpriseClient {
             .retry(reqwest::retry::never())
             .timeout(config.timeout)
             .build()?;
-        let base_url = Url::parse(&format!(
-            "https://{}-discoveryengine.googleapis.com/v1/",
-            config.location
-        ))?;
+        let base_url = Url::parse(&endpoint(&config.location))?;
         Ok(Self {
             http,
             provider,
@@ -562,6 +559,18 @@ async fn bounded_body(mut response: reqwest::Response) -> std::result::Result<Ve
 }
 
 // Content-free diagnostics: do not echo server bodies, prompts, answer text or token material.
+/// Gemini Enterprise multi-regions accepted by this client.
+pub(crate) const SUPPORTED_LOCATIONS: [&str; 3] = ["global", "us", "eu"];
+
+/// Discovery Engine v1 endpoint: the bare host for `global`, `{location}-` otherwise.
+fn endpoint(location: &str) -> String {
+    if location == "global" {
+        "https://discoveryengine.googleapis.com/v1/".to_string()
+    } else {
+        format!("https://{location}-discoveryengine.googleapis.com/v1/")
+    }
+}
+
 fn http_reason(status: u16, bytes: &[u8]) -> String {
     let value: Value = serde_json::from_slice(bytes).unwrap_or(Value::Null);
     let permission = value["error"]["details"].as_array().and_then(|details| {
@@ -573,6 +582,9 @@ fn http_reason(status: u16, bytes: &[u8]) -> String {
     });
     match permission {
         Some(p) => format!("HTTP {status}; missing permission {p}"),
+        None if status == 404 => format!(
+            "HTTP {status}; check the engine ID and that the location matches the engine's own location (an engine in us or eu is not found under global)"
+        ),
         None => format!(
             "HTTP {status}; inspect access, model entitlement, quota and request configuration"
         ),

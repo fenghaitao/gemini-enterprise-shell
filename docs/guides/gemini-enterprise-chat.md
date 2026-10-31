@@ -31,8 +31,12 @@ from `GEMINI_CHAT_CA_BUNDLE`, then `SSL_CERT_FILE`, then `REQUESTS_CA_BUNDLE` (f
 nonempty wins; a bad selected bundle fails closed). Built-in roots stay trusted.
 Through the Python SDK, the same variables apply.
 
-The endpoint is derived from `--location`, e.g.
-`https://us-discoveryengine.googleapis.com/v1/`. A hidden `--base-url`
+`--location` must be `global`, `us` or `eu`, and must be the **engine's own
+location**: it is part of every resource path, so an engine created in `us` is not
+found under `global` (HTTP 404). The endpoint follows the location: `global` uses
+`https://discoveryengine.googleapis.com/v1/`; `us` and `eu` use
+`https://us-discoveryengine.googleapis.com/v1/` and
+`https://eu-discoveryengine.googleapis.com/v1/`. A hidden `--base-url`
 (`GEMINI_CHAT_BASE_URL`) is a test/proxy override and must include `/v1` (local
 HTTP only for tests).
 
@@ -61,7 +65,7 @@ Optional configuration:
 | Flag/environment | Default/meaning |
 | --- | --- |
 | `--project-number` / `GEMINI_CHAT_PROJECT_NUMBER` | Required project **number** |
-| `--location` / `GEMINI_CHAT_LOCATION` | `global` (or `us`, `eu`) |
+| `--location` / `GEMINI_CHAT_LOCATION` | `global` (default), `us` or `eu`; must match the engine |
 | `--engine-id` / `GEMINI_CHAT_ENGINE_ID` | Required real engine ID |
 | `--assistant-id` / `GEMINI_CHAT_ASSISTANT_ID` | `default_assistant` |
 | `--collection-id` / `GEMINI_CHAT_COLLECTION_ID` | `default_collection` |
