@@ -665,6 +665,13 @@ impl<'de> Deserialize<'de> for Frames {
     }
 }
 
+#[path = "scoped.rs"]
+mod scoped;
+pub use scoped::{
+    AnswerCitation, AnswerReference, AnswerSource, FolderAnswer, FolderAnswerRequest, SearchHit,
+    SearchRequest, SearchResults, MAX_SEARCH_RESULTS,
+};
+
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;

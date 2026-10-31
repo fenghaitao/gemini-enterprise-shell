@@ -108,6 +108,64 @@ service-reported persisted selection, unlike the response's `requested_model`.
 Cross-UI visibility and continuity with Google's browser chat are **not**
 verified; returning a server session is not proof of that.
 
+## Answers limited to one SharePoint folder
+
+`ask` (streamAssist) cannot be restricted to a folder: a folder named in the question
+only steers retrieval, and the assistant may search elsewhere or answer from memory.
+For a server-enforced scope, use the two-step commands instead:
+
+```sh
+# Search only (no generation). Every word must match, so use keywords.
+gemini-chat --json search \
+  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
+  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
+  sync handshake
+
+# Answer only from the matching files in that folder (one generation, sessionless).
+gemini-chat answer \
+  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
+  --search-terms 'sync handshake' \
+  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
+  'In two sentences, what does the spec say the handshake does?'
+```
+
+How it works:
+
+1. **Search** sends `(<search terms>) path:"<folder>"`. With a federated SharePoint
+   datastore, SharePoint evaluates `path:` itself: recursive, with your own SharePoint
+   permissions. Spell correction is suggestion-only, because automatic correction
+   rewrites the folder URL.
+2. **Answer** receives only those files (`searchSpec.searchResultList`), so no other
+   server-side search runs; its citations can only point at supplied files.
+3. Every search result and every answer reference is re-checked locally against the
+   folder (host, then path, case-insensitive, ignoring `?web=1`). Anything outside
+   fails the call instead of being dropped silently.
+
+Folder URLs: paste the browser address of the folder, with or without a trailing slash,
+with literal or `%20` spaces, or the library view (`…/Forms/AllItems.aspx?id=/sites/…`).
+Sharing links (`…/:f:/…`) cannot be resolved locally and are rejected. Search terms must
+not contain `path:` and must have balanced quotes and parentheses.
+
+Limits:
+
+- Keywords, not a sentence: with a folder restriction SharePoint requires every word to
+  match, which is why `answer` takes `--search-terms` separately from the question.
+- At most 100 files per search (`--page-size`, default 10), with no further pages; a
+  warning says when the limit was reached.
+- Search returns full text for only about the top 5 files; the rest are sent as short
+  snippets, and a warning reports how many.
+- `answer` is sessionless, has no `--model` option, and does not continue a
+  conversation. A question the Answer API declines (for example small talk) is reported
+  as skipped; if no file matches, the Answer API is not called at all.
+- This relies on the SharePoint connector being in **federated** (live search) mode. It
+  needs the `discoveryengine.servingConfigs.search` and `.answer` permissions.
+- The strongest alternative is admin-side: a dedicated SharePoint connector whose Path
+  filter is the folder. Then plain `--data-store-id` is scoped on every call, including `ask`.
+
+In Rust: `GeminiEnterpriseClient::search(SearchRequest)` and
+`GeminiEnterpriseClient::answer_in_folder(FolderAnswerRequest)` with a
+`SharePointFolder::parse(url)`.
+
 ## Rust
 
 Crate `gemini-chat` (path `crates/gemini-chat`), no NotebookLM dependency:

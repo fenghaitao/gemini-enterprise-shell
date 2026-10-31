@@ -28,7 +28,9 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 fn skip_hint(reasons: &[String]) -> &'static str {
-    if reasons
+    if reasons.iter().any(|r| r == "NO_MATCHING_FILES_IN_FOLDER") {
+        "no files in the folder matched the search terms; try fewer or different keywords"
+    } else if reasons
         .iter()
         .any(|r| r == "NON_ASSIST_SEEKING_QUERY_IGNORED")
     {
