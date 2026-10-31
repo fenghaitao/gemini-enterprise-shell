@@ -50,6 +50,9 @@ impl AssistResponse {
     }
 }
 
+/// One native grounding block. After parsing, every segment's `startIndex`/`endIndex`
+/// is a UTF-8 byte offset into [`AssistResponse::answer`], even when the service sent
+/// offsets relative to the block's own text fragment.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextGroundingMetadata {
