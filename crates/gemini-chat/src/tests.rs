@@ -412,3 +412,52 @@ fn connector_auth_errors_without_an_answer_explain_the_failure() {
     let error = parse(f).unwrap_err().to_string();
     assert!(!error.contains("sensitive"));
 }
+
+#[test]
+fn endpoint_uses_bare_host_for_global_and_prefixed_hosts_for_regions() {
+    for (location, expected) in [
+        ("global", "https://discoveryengine.googleapis.com/v1/"),
+        ("us", "https://us-discoveryengine.googleapis.com/v1/"),
+        ("eu", "https://eu-discoveryengine.googleapis.com/v1/"),
+    ] {
+        let client = GeminiEnterpriseClient::new(
+            Arc::new(StaticTokenProvider::new("t")),
+            GeminiEnterpriseConfig::new("123", location, "search"),
+        )
+        .unwrap();
+        assert_eq!(client.base_url.as_str(), expected, "{location}");
+        // The location is also part of every resource path.
+        assert!(client
+            .config
+            .engine()
+            .contains(&format!("/locations/{location}/")));
+    }
+}
+
+#[test]
+fn unsupported_locations_are_rejected_locally() {
+    for location in ["foo", "US", "us-central1", "europe-west1", "", "global/"] {
+        let error = GeminiEnterpriseClient::new(
+            Arc::new(StaticTokenProvider::new("t")),
+            GeminiEnterpriseConfig::new("123", location, "search"),
+        )
+        .err()
+        .unwrap_or_else(|| panic!("{location:?} accepted"))
+        .to_string();
+        assert!(error.contains("validation error"), "{location:?}: {error}");
+    }
+    let error = GeminiEnterpriseClient::new(
+        Arc::new(StaticTokenProvider::new("t")),
+        GeminiEnterpriseConfig::new("123", "foo", "search"),
+    )
+    .err()
+    .unwrap()
+    .to_string();
+    assert!(error.contains("global, us, eu"), "{error}");
+}
+
+#[test]
+fn not_found_hints_at_a_location_mismatch() {
+    assert!(http_reason(404, b"{}").contains("location matches the engine's own location"));
+    assert!(!http_reason(403, b"{}").contains("location"));
+}
