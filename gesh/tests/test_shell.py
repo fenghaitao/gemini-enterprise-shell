@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import os
+import stat
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,7 +10,7 @@ from typing import Any
 import pytest
 from rich.console import Console
 
-from gesh.cli import build_config, parse_args
+from gesh.cli import _prompt_history, build_config, main, parse_args
 from gesh.config import Config
 from gesh.render import citations, clean_snippet
 from gesh.shell import Shell, _Abandoned
@@ -312,3 +314,66 @@ def test_real_clients_come_from_the_two_independent_sdks() -> None:
     assert isinstance(shell.chat, gemini_chat.GeminiEnterpriseClient)
     assert isinstance(shell.notebooks, nblm.NblmClient)
     assert not hasattr(nblm, "GeminiEnterpriseClient")
+
+
+def test_abandoned_ask_snapshots_session_and_late_result_cannot_hijack_new_session() -> None:
+    release = threading.Event()
+    result: dict[str, Any] = {}
+
+    def abandon_runner(func: Any, label: str) -> Any:
+        def target() -> None:
+            release.wait(5)
+            result["value"] = func()
+
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+        raise _Abandoned(thread, result)
+
+    shell, chat, _, out = make_shell(runner=abandon_runner)
+    original = f"{ENGINE}/sessions/7"
+    shell.session = original
+    shell.handle("slow question")
+    shell.handle("/new")
+    assert shell.session is None
+
+    release.set()
+    assert shell.pending is not None
+    shell.pending.thread.join(5)
+    shell._run = sync_runner
+    shell.handle("/config")  # polls the late result
+
+    assert chat.calls[0]["session_id"] == original
+    assert shell.session is None
+    assert "Active session unchanged" in out.getvalue()
+
+
+def test_scripted_errors_return_nonzero_and_success_returns_zero() -> None:
+    assert main(["-c", "/bogus"]) == 1
+    assert main(["-c", "/config"]) == 0
+
+
+def test_history_is_private_and_can_be_disabled(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    enabled_root = tmp_path / "enabled"
+    monkeypatch.setenv("XDG_STATE_HOME", str(enabled_root))
+    history = _prompt_history(True)
+    from prompt_toolkit.history import FileHistory, InMemoryHistory
+
+    assert isinstance(history, FileHistory)
+    state = enabled_root / "gesh"
+    history_path = state / "history"
+    assert history_path.is_file()
+    if os.name == "posix":
+        assert stat.S_IMODE(state.stat().st_mode) == 0o700
+        assert stat.S_IMODE(history_path.stat().st_mode) == 0o600
+
+    disabled_root = tmp_path / "disabled"
+    monkeypatch.setenv("XDG_STATE_HOME", str(disabled_root))
+    history = _prompt_history(False)
+    assert isinstance(history, InMemoryHistory)
+    assert not (disabled_root / "gesh").exists()
+
+
+def test_no_history_flag_is_parsed() -> None:
+    assert parse_args(["--no-history"]).no_history is True
