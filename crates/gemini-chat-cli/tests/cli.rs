@@ -196,3 +196,43 @@ async fn closed_stdout_exits_quietly_without_panicking() {
     assert!(!stderr.contains("panicked"), "stderr: {stderr}");
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
+#[tokio::test]
+async fn session_output_is_a_summary_or_json_never_both() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/{ENGINE}/sessions/456")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "name": format!("{ENGINE}/sessions/456"),
+            "displayName": "Demo",
+            "turns": [{"query": {"text": "first question"},
+                       "queryConfig": {"google.discoveryengine.googleapis.com.Assistant.model_id": "gemini-4-argon"}}]
+        })))
+        .mount(&server)
+        .await;
+    let text = command(&server)
+        .args(["session", "--session-id", "456"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8(text).unwrap();
+    assert!(
+        text.contains("Turn 1: model gemini-4-argon | first question"),
+        "{text}"
+    );
+    assert!(text.contains("Title: Demo"));
+    assert!(
+        !text.contains('{'),
+        "summary must not include the JSON dump: {text}"
+    );
+    let json_out = command(&server)
+        .args(["--json", "session", "--session-id", "456"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&json_out).expect("--json prints only JSON");
+    assert_eq!(value["displayName"], "Demo");
+}
