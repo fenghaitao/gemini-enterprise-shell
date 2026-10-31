@@ -95,6 +95,7 @@ installed (`cargo install cargo-make`), run from the repository root:
 make                         # Build the release CLI
 make install                 # Install/update the nblm command from this checkout
 make install-chat            # Install/update the gemini-chat command
+make gesh                    # Interactive shell for chat + notebooks (gesh/, needs uv)
 make run ARGS="--help"        # Run from source, rebuilding changes automatically
 make help                    # List available targets
 ```
