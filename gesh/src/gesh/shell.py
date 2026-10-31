@@ -223,13 +223,9 @@ class Shell:
         try:
             response = self._run(call, "Asking Gemini Enterprise")
         except _Abandoned as abandoned:
-            self.pending = _Pending(
-                question, abandoned.thread, session_epoch, abandoned.result
-            )
+            self.pending = _Pending(question, abandoned.thread, session_epoch, abandoned.result)
             where = (
-                f" in session {render.short_id(session_at_dispatch)}"
-                if session_at_dispatch
-                else ""
+                f" in session {render.short_id(session_at_dispatch)}" if session_at_dispatch else ""
             )
             self.console.print(
                 Text(
