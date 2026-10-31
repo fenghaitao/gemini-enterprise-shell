@@ -467,7 +467,7 @@ class Shell:
             return ref
         if not self.notebook_cache:
             raise ShellError(
-                "notebook numbers come from /nb list; run /nb list first or use a notebook ID"
+                "notebook numbers come from /nb list; run /nb list first or use a full notebook resource name"
             )
         nb = self._find_notebook(ref)
         return str(nb.notebook_id)
