@@ -47,7 +47,9 @@ impl OAuthBootstrapper {
     }
 
     fn create_http_client() -> Result<Arc<Client>> {
-        Client::builder()
+        // Trust the configured corporate CA bundle for token exchange and refresh too.
+        nblm_core::http_client_builder()
+            .map_err(|e| anyhow!("failed to create HTTP client: {}", e))?
             .user_agent(concat!("nblm-cli/", env!("CARGO_PKG_VERSION")))
             .build()
             .map(Arc::new)

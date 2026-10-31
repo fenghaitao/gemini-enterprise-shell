@@ -58,7 +58,7 @@ Behind an HTTPS-inspecting proxy, requests fail with `invalid peer certificate: 
 export NBLM_CA_BUNDLE=/path/to/your/organization-ca-bundle.pem
 ```
 
-Precedence is **`NBLM_CA_BUNDLE` → `SSL_CERT_FILE` → `REQUESTS_CA_BUNDLE`** (first nonempty value wins), so an environment that already sets `SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` works without changes. An unreadable, malformed or empty selected bundle fails closed; it is not silently replaced by a lower-priority variable. The bundle adds trust roots to the NotebookLM and token-info clients. The separate `gemini-chat` client reads `GEMINI_CHAT_CA_BUNDLE`, then the same `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`. Certificate and hostname verification stay enabled and built-in roots remain available.
+Precedence is **`NBLM_CA_BUNDLE` → `SSL_CERT_FILE` → `REQUESTS_CA_BUNDLE`** (first nonempty value wins), so an environment that already sets `SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` works without changes. An unreadable, malformed or empty selected bundle fails closed; it is not silently replaced by a lower-priority variable. The bundle adds trust roots to the NotebookLM client, the token-info check and the user-OAuth login and token-refresh flows (CLI and Python). The separate `gemini-chat` client reads `GEMINI_CHAT_CA_BUNDLE`, then the same `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`. Certificate and hostname verification stay enabled and built-in roots remain available.
 
 ### CLI
 
