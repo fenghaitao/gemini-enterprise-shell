@@ -34,5 +34,5 @@ help:
 	  'make check                 Check the Rust core and CLI' \
 	  'make test                  Run Rust core and CLI tests' \
 	  'make ci                    Check Rust formatting, Clippy, and tests' \
-	  'make py-build              Rebuild the editable Python SDK' \
+	  'make py-build              Rebuild both editable Python SDKs (nblm and gemini_chat)' \
 	  'Requires GNU Make, Rust/Cargo, and cargo-make (cargo install cargo-make).'
