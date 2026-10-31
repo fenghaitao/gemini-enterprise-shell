@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 mod auth;
 mod client;
 mod error;
+mod gemini;
 mod models;
 mod runtime;
 
@@ -12,6 +13,7 @@ pub use auth::{
 };
 pub use client::NblmClient;
 pub use error::NblmError;
+pub use gemini::{GeminiAssistResponse, GeminiEnterpriseClient};
 pub use models::{
     AudioOverviewRequest, AudioOverviewResponse, BatchCreateSourcesResponse,
     BatchDeleteNotebooksResponse, BatchDeleteSourcesResponse, GoogleDriveSource,
@@ -25,6 +27,8 @@ pub use models::{
 fn nblm(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(auth::login, m)?)?;
     m.add_class::<NblmClient>()?;
+    m.add_class::<GeminiEnterpriseClient>()?;
+    m.add_class::<GeminiAssistResponse>()?;
     m.add_class::<GcloudTokenProvider>()?;
     m.add_class::<EnvTokenProvider>()?;
     m.add_class::<UserOAuthProvider>()?;

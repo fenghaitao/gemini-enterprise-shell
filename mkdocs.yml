@@ -56,6 +56,7 @@ nav:
       - Notebooks: cli/notebooks.md
       - Sources: cli/sources.md
       - Audio: cli/audio.md
+      - Gemini Enterprise: guides/gemini-enterprise-chat.md
       - Share: cli/share.md
       - Doctor: cli/doctor.md
   - Python SDK:

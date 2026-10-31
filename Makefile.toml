@@ -71,6 +71,11 @@ description = "Build and install/update the CLI from this checkout"
 command = "cargo"
 args = ["install", "--path", "crates/nblm-cli", "--force", "--locked"]
 
+[tasks.install-chat]
+description = "Build and install/update the gemini-chat CLI from this checkout"
+command = "cargo"
+args = ["install", "--path", "crates/gemini-chat-cli", "--force", "--locked"]
+
 [tasks.run]
 description = "Rebuild as needed and run the CLI from this checkout"
 command = "cargo"
