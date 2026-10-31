@@ -27,7 +27,7 @@
 </div>
 
 > [!IMPORTANT]
-> This project targets the **NotebookLM Enterprise API** only. Google hasn’t published an API for the consumer edition or general Google Workspace tenants as of 2025-10-25.
+> This project targets the **NotebookLM Enterprise API** and includes a separate **official Gemini Enterprise assistant** client. Google hasn’t published an API for the consumer edition or general Google Workspace tenants as of 2025-10-25.
 
 ## Motivation
 
@@ -94,6 +94,7 @@ installed (`cargo install cargo-make`), run from the repository root:
 ```bash
 make                         # Build the release CLI
 make install                 # Install/update the nblm command from this checkout
+make install-chat            # Install/update the gemini-chat command
 make run ARGS="--help"        # Run from source, rebuilding changes automatically
 make help                    # List available targets
 ```
@@ -139,6 +140,27 @@ nblm sources add \
   --web-url "https://example.com" \
   --web-name "Example"
 ```
+
+### Gemini Enterprise chat (official API)
+
+Uses the official Discovery Engine v1 assistant API with the same OAuth token as
+the rest of the CLI:
+
+A separate `gemini-chat` command and crate, independent of nblm
+(`make install-chat` installs it):
+
+```sh
+gemini-chat --project-number YOUR_PROJECT_NUMBER --location us --json \
+  --engine-id YOUR_ENGINE_ID ask \
+  --model gemini-4-argon --data-store-id YOUR_SHAREPOINT_DATASTORE_ID \
+  'Find the relevant document and cite its supporting evidence.'
+```
+
+Supports explicit models, server-session continuation/readback, and native
+structured grounding. No generation retries or model fallback. Answers without
+native references are flagged; citations and quotes still require review.
+See the [Gemini Enterprise guide](docs/guides/gemini-enterprise-chat.md) for CLI,
+Rust/Python examples, authentication, and tool boundaries.
 
 ### Python
 

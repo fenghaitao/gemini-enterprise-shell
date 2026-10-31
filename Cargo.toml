@@ -1,3 +1,9 @@
 [workspace]
-members = ["crates/nblm-core", "crates/nblm-cli", "crates/nblm-python"]
+members = [
+    "crates/nblm-core",
+    "crates/nblm-cli",
+    "crates/nblm-python",
+    "crates/gemini-chat",
+    "crates/gemini-chat-cli",
+]
 resolver = "2"

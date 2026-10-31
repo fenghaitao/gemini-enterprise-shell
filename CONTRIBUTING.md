@@ -66,6 +66,7 @@ The root `Makefile` delegates to the existing `cargo-make` tasks:
 ```bash
 make                         # Build the release CLI
 make install                 # Install/update the CLI from this checkout
+make install-chat            # Install/update the gemini-chat CLI
 make run ARGS="--help"        # Build incrementally and run from source
 make check                   # Check Rust core and CLI
 make test                    # Run Rust core and CLI tests

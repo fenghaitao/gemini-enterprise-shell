@@ -10,6 +10,7 @@ from ._auth import (
     login,
 )
 from ._client import NblmClient
+from ._gemini import GeminiAssistResponse, GeminiEnterpriseClient
 from ._models import (
     AudioOverviewRequest,
     AudioOverviewResponse,
@@ -43,6 +44,8 @@ __all__ = [
     "BatchDeleteSourcesResponse",
     "EnvTokenProvider",
     "GcloudTokenProvider",
+    "GeminiAssistResponse",
+    "GeminiEnterpriseClient",
     "GoogleDriveSource",
     "ListRecentlyViewedResponse",
     "NblmClient",

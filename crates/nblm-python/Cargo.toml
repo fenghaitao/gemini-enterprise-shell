@@ -17,6 +17,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 nblm-core = { path = "../nblm-core" }
+gemini-chat = { path = "../gemini-chat" }
+async-trait = "0.1.89"
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py312"] }
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 serde_json = "1.0"
