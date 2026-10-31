@@ -3,7 +3,7 @@ skip_core_tasks = true
 default_to_workspace = false
 
 [env]
-UV_RUN_ARGS = "run;--project;python;--extra;dev;--directory;python"
+UV_RUN_ARGS = "run;--extra;dev;--directory;python"
 
 [tasks.before-build]
 
