@@ -236,3 +236,117 @@ async fn session_output_is_a_summary_or_json_never_both() {
     let value: Value = serde_json::from_slice(&json_out).expect("--json prints only JSON");
     assert_eq!(value["displayName"], "Demo");
 }
+
+const FOLDER: &str = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs";
+
+fn folder_search_response() -> Value {
+    json!({"results": [
+        {"document": {"name": "docs/a", "structData": {"title": "A-0001", "url": format!("{FOLDER}/A-0001.txt?web=1"), "content": "Alpha full text"}}},
+        {"document": {"name": "docs/b", "structData": {"title": "B-0002", "url": format!("{FOLDER}/sub/B-0002.txt"), "description": "<c0>Beta</c0> snippet"}}}
+    ]})
+}
+
+#[tokio::test]
+async fn search_restricts_to_the_folder_and_lists_results() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:search"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(folder_search_response()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    command(&server)
+        .args([
+            "search",
+            "--sharepoint-folder",
+            "https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs/",
+            "--data-store-id",
+            "sp_file",
+            "alpha",
+            "beta",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 result(s)"))
+        .stdout(predicate::str::contains("[1] A-0001"))
+        .stdout(predicate::str::contains("(full text)"))
+        .stdout(predicate::str::contains("(snippet)"));
+    let requests = server.received_requests().await.unwrap();
+    let body: Value = serde_json::from_slice(&requests[0].body).unwrap();
+    assert_eq!(body["query"], format!("(alpha beta) path:\"{FOLDER}\""));
+}
+
+#[tokio::test]
+async fn answer_uses_only_folder_files_and_prints_references() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:search"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(folder_search_response()))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:answer"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"answer": {
+            "state": "SUCCEEDED", "answerText": "Alpha answer.",
+            "citations": [{"endIndex": "6", "sources": [{"referenceId": "0"}]}],
+            "references": [{"chunkInfo": {"content": "Alpha", "documentMetadata": {"uri": format!("{FOLDER}/A-0001.txt"), "title": "A-0001"}}}]
+        }})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    command(&server)
+        .args([
+            "answer",
+            "--sharepoint-folder",
+            FOLDER,
+            "--search-terms",
+            "alpha",
+            "--data-store-id",
+            "sp_file",
+            "What does A say?",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alpha answer."))
+        .stdout(predicate::str::contains(
+            "Files used: 2 (1 full text, 1 snippet)",
+        ))
+        .stdout(predicate::str::contains("[0] A-0001"))
+        .stderr(predicate::str::contains(
+            "1 of 2 files were sent as short snippets",
+        ));
+    // Sharing links and path: in the terms are rejected before any request.
+    let before = server.received_requests().await.unwrap().len();
+    command(&server)
+        .args([
+            "answer",
+            "--sharepoint-folder",
+            "https://example.sharepoint.com/:f:/s/eng/Eabc",
+            "--search-terms",
+            "x",
+            "--data-store-id",
+            "sp_file",
+            "q",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("sharing links"));
+    command(&server)
+        .args([
+            "search",
+            "--sharepoint-folder",
+            FOLDER,
+            "x",
+            "path:\"https://example.sharepoint.com/sites/other\"",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must not contain path:"));
+    assert_eq!(server.received_requests().await.unwrap().len(), before);
+}

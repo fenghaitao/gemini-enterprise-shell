@@ -9,8 +9,9 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use gemini_chat::{
-    AssistRequest, AssistResponse, EnvTokenProvider, GcloudTokenProvider, GeminiEnterpriseClient,
-    GeminiEnterpriseConfig, TokenProvider,
+    AssistRequest, AssistResponse, EnvTokenProvider, FolderAnswer, FolderAnswerRequest,
+    GcloudTokenProvider, GeminiEnterpriseClient, GeminiEnterpriseConfig, SearchRequest,
+    SearchResults, SharePointFolder, TokenProvider,
 };
 
 const TOKEN_ENV: &str = "GEMINI_CHAT_ACCESS_TOKEN";
@@ -85,6 +86,45 @@ enum Command {
     /// Read a saved server session and its service-reported model metadata (no generation).
     /// Prints a summary, or the full session with --json.
     Session(SessionArgs),
+    /// Search files (no generation). With --sharepoint-folder, results are restricted to
+    /// that folder by SharePoint and re-checked locally.
+    Search(SearchArgs),
+    /// Answer only from files in one SharePoint folder: a folder-scoped search with
+    /// --search-terms, then an answer from just those files. Sessionless; one generation.
+    Answer(FolderAnswerArgs),
+}
+
+#[derive(Args)]
+struct SearchArgs {
+    /// Restrict to this folder (recursive); copy the URL from the browser.
+    #[arg(long, value_name = "URL")]
+    sharepoint_folder: Option<String>,
+    /// Datastore to search (repeatable), e.g. the SharePoint file datastore.
+    #[arg(long = "data-store-id", value_name = "ID")]
+    data_stores: Vec<String>,
+    /// Maximum results, 1-100.
+    #[arg(long, default_value_t = 10)]
+    page_size: u32,
+    /// Keywords. With a folder every word must match, so avoid full sentences.
+    #[arg(required = true, num_args = 1..)]
+    terms: Vec<String>,
+}
+
+#[derive(Args)]
+struct FolderAnswerArgs {
+    /// Answer only from files in this folder (recursive).
+    #[arg(long, value_name = "URL")]
+    sharepoint_folder: String,
+    /// Keywords that find the relevant files (every word must match), separate from the question.
+    #[arg(long, value_name = "KEYWORDS")]
+    search_terms: String,
+    /// Datastore to search (repeatable; at least one), e.g. the SharePoint file datastore.
+    #[arg(long = "data-store-id", value_name = "ID", required = true)]
+    data_stores: Vec<String>,
+    /// Files to retrieve, 1-100. Only about the top 5 arrive with full text.
+    #[arg(long, default_value_t = 10)]
+    page_size: u32,
+    question: String,
 }
 
 #[derive(Args)]
@@ -160,6 +200,26 @@ async fn run(cli: Cli) -> Result<()> {
             let response = client.ask(request).await?;
             emit_answer(&response, global.json)?;
         }
+        Command::Search(args) => {
+            let mut request = SearchRequest::new(args.terms.join(" "));
+            request.folder = args
+                .sharepoint_folder
+                .as_deref()
+                .map(SharePointFolder::parse)
+                .transpose()?;
+            request.data_stores = args.data_stores;
+            request.page_size = args.page_size;
+            let results = client.search(request).await?;
+            emit_search(&results, global.json)?;
+        }
+        Command::Answer(args) => {
+            let folder = SharePointFolder::parse(&args.sharepoint_folder)?;
+            let mut request = FolderAnswerRequest::new(args.question, args.search_terms, folder);
+            request.data_stores = args.data_stores;
+            request.page_size = args.page_size;
+            let answer = client.answer_in_folder(request).await?;
+            emit_folder_answer(&answer, global.json)?;
+        }
         Command::Session(args) => {
             let session = client
                 .get_session(&args.session_id, args.include_answer_details)
@@ -221,6 +281,68 @@ fn emit_answer(response: &AssistResponse, json_mode: bool) -> Result<()> {
     out.flush()?;
     drop(out);
     for warning in &response.warnings {
+        eprintln!("Warning: {warning}");
+    }
+    Ok(())
+}
+
+fn emit_search(results: &SearchResults, json_mode: bool) -> Result<()> {
+    let mut out = io::stdout().lock();
+    if json_mode {
+        writeln!(out, "{}", serde_json::to_string_pretty(results)?)?;
+    } else {
+        writeln!(out, "Query: {}", results.query)?;
+        writeln!(out, "{} result(s)", results.hits.len())?;
+        for (i, hit) in results.hits.iter().enumerate() {
+            let text = if hit.content.is_some() {
+                "full text"
+            } else {
+                "snippet"
+            };
+            writeln!(
+                out,
+                "  [{}] {} — {} ({text})",
+                i + 1,
+                hit.title.as_deref().unwrap_or("untitled"),
+                hit.uri.as_deref().unwrap_or("URI not provided")
+            )?;
+        }
+    }
+    out.flush()?;
+    drop(out);
+    for warning in &results.warnings {
+        eprintln!("Warning: {warning}");
+    }
+    Ok(())
+}
+
+fn emit_folder_answer(answer: &FolderAnswer, json_mode: bool) -> Result<()> {
+    let mut out = io::stdout().lock();
+    if json_mode {
+        writeln!(out, "{}", serde_json::to_string_pretty(answer)?)?;
+    } else {
+        writeln!(out, "{}\n", answer.answer)?;
+        writeln!(out, "Folder: {}", answer.folder)?;
+        let full = answer.sources.iter().filter(|s| s.full_text).count();
+        writeln!(
+            out,
+            "Files used: {} ({full} full text, {} snippet)",
+            answer.sources.len(),
+            answer.sources.len() - full
+        )?;
+        writeln!(out, "References: {}", answer.references.len())?;
+        for (i, reference) in answer.references.iter().enumerate() {
+            writeln!(
+                out,
+                "  [{i}] {} — {}",
+                reference.title.as_deref().unwrap_or("untitled"),
+                reference.uri.as_deref().unwrap_or("URI not provided")
+            )?;
+        }
+    }
+    out.flush()?;
+    drop(out);
+    for warning in &answer.warnings {
         eprintln!("Warning: {warning}");
     }
     Ok(())
