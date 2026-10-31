@@ -299,6 +299,7 @@ impl GeminiEnterpriseClient {
         let mut grounding = Vec::new();
         let mut tools = Vec::new();
         let mut terminal = None;
+        let mut skipped_reasons: Vec<String> = Vec::new();
         for frame in frames {
             if let Some(info) = frame.session_info {
                 let canonical = self.session_resource(&info.session).map_err(|_| {
@@ -337,12 +338,25 @@ impl GeminiEnterpriseClient {
                 }
                 match answer.state.as_deref() {
                     Some("SUCCEEDED" | "FAILED" | "SKIPPED" | "CANCELLED") => {
-                        terminal = Some((answer.state.unwrap(), answer.name))
+                        terminal = Some((answer.state.unwrap(), answer.name));
+                        skipped_reasons = answer.skipped_reasons;
                     }
                     Some("IN_PROGRESS") | None => {}
                     _ => return Err(assist_error("unknown answer state", session)),
                 }
             }
+        }
+        if terminal
+            .as_ref()
+            .is_some_and(|(state, _)| state == "SKIPPED")
+        {
+            if skipped_reasons.is_empty() {
+                skipped_reasons.push("UNSPECIFIED".into());
+            }
+            return Err(Error::Skipped {
+                reasons: skipped_reasons,
+                session,
+            });
         }
         let Some((state, Some(name))) = terminal else {
             return Err(assist_error("missing named terminal answer", session));
@@ -498,6 +512,8 @@ struct SessionInfo {
 struct Answer {
     state: Option<String>,
     name: Option<String>,
+    #[serde(default, rename = "assistSkippedReasons")]
+    skipped_reasons: Vec<String>,
     #[serde(default)]
     replies: Vec<Reply>,
 }

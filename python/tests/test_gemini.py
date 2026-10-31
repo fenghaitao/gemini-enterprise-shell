@@ -18,6 +18,7 @@ class _Handler(BaseHTTPRequestHandler):
     requests: ClassVar[list[tuple[str, str, dict[str, object] | None]]] = []
     status: ClassVar[int] = 200
     cited: ClassVar[bool] = True
+    skipped: ClassVar[bool] = False
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: ARG002
         return
@@ -38,6 +39,18 @@ class _Handler(BaseHTTPRequestHandler):
         assert self.headers.get("Cookie") is None
         if type(self).status != 200:
             self._send({"error": {"message": "sensitive server text"}})
+            return
+        if type(self).skipped:  # live shape for small talk such as "Hello"
+            self._send(
+                [
+                    {
+                        "answer": {
+                            "state": "SKIPPED",
+                            "assistSkippedReasons": ["NON_ASSIST_SEEKING_QUERY_IGNORED"],
+                        }
+                    }
+                ]
+            )
             return
         grounding = (
             {
@@ -87,6 +100,7 @@ def server() -> Iterator[str]:
     _Handler.requests = []
     _Handler.status = 200
     _Handler.cited = True
+    _Handler.skipped = False
     httpd = HTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -142,6 +156,16 @@ def test_no_grounding_is_explicit(monkeypatch: pytest.MonkeyPatch, server: str) 
     assert result.native_reference_count == 0
     assert result.grounding == []
     assert result.warnings and "No native grounding" in result.warnings[0]
+
+
+def test_skipped_small_talk_explains_why(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    _Handler.skipped = True
+    with pytest.raises(NblmError, match="ignores greetings") as exc:
+        _client(monkeypatch, server).ask("Hello")
+    assert getattr(exc.value, "skipped_reasons", None) == ["NON_ASSIST_SEEKING_QUERY_IGNORED"]
+    assert getattr(exc.value, "session", "unset") is None
+    assert not getattr(exc.value, "do_not_retry", False)
+    assert "may have recorded" not in str(exc.value)
 
 
 @pytest.mark.parametrize("status", [400, 401, 403, 429, 503])

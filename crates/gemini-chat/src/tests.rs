@@ -289,3 +289,26 @@ fn frame_budget_is_enforced_during_deserialization() {
     let frames = json!(vec![json!({}); MAX_FRAMES + 1]);
     assert!(parse(frames).is_err());
 }
+
+#[test]
+fn skipped_small_talk_reports_reason_instead_of_a_generic_failure() {
+    // Captured live for the query "Hello": no answer name, replies or session.
+    let frames = json!([{"answer":{"state":"SKIPPED","assistSkippedReasons":["NON_ASSIST_SEEKING_QUERY_IGNORED"]},"assistToken":"t"}]);
+    match parse(frames) {
+        Err(Error::Skipped { reasons, session }) => {
+            assert_eq!(reasons, ["NON_ASSIST_SEEKING_QUERY_IGNORED"]);
+            assert!(session.is_none());
+        }
+        other => panic!("expected Skipped, got {:?}", other.map(|r| r.answer)),
+    }
+    let message = parse(json!([{"answer":{"state":"SKIPPED","assistSkippedReasons":["NON_ASSIST_SEEKING_QUERY_IGNORED"]}}]))
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("ignores greetings"), "{message}");
+    assert!(!message.contains("may have recorded"), "{message}");
+    // A skip without reasons is still a skip, not a success.
+    assert!(matches!(
+        parse(json!([{"answer":{"state":"SKIPPED"}}])),
+        Err(Error::Skipped { .. })
+    ));
+}

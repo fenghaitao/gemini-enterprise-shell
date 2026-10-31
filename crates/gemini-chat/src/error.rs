@@ -9,6 +9,12 @@ pub enum Error {
         reason: String,
         session: Option<String>,
     },
+    /// The assistant declined to answer (e.g. greetings); nothing was generated.
+    #[error("Gemini Enterprise skipped this question ({}): {}", reasons.join(", "), skip_hint(reasons))]
+    Skipped {
+        reasons: Vec<String>,
+        session: Option<String>,
+    },
     #[error("token provider error: {0}")]
     TokenProvider(String),
     #[error("request error: {0}")]
@@ -20,6 +26,17 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+fn skip_hint(reasons: &[String]) -> &'static str {
+    if reasons
+        .iter()
+        .any(|r| r == "NON_ASSIST_SEEKING_QUERY_IGNORED")
+    {
+        "the assistant ignores greetings and small talk; ask a concrete question"
+    } else {
+        "no answer was generated; rephrase the question"
+    }
+}
 
 impl Error {
     pub fn validation(message: impl Into<String>) -> Self {

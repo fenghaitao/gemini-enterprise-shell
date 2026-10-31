@@ -34,6 +34,13 @@ fn map_chat_error(err: gemini_chat::Error) -> PyErr {
             let _ = py_err.value(py).setattr("do_not_retry", true);
             py_err
         }),
+        // Nothing was generated (e.g. greetings); safe to ask a different question.
+        gemini_chat::Error::Skipped { reasons, session } => Python::attach(|py| {
+            let py_err = NblmError::new_err(message);
+            let _ = py_err.value(py).setattr("skipped_reasons", reasons);
+            let _ = py_err.value(py).setattr("session", session);
+            py_err
+        }),
         _ => NblmError::new_err(message),
     }
 }
