@@ -208,6 +208,29 @@ args = ["@@split(UV_RUN_ARGS,;)", "maturin", "develop"]
 description = "Run all Python checks (fmt, lint, type, test)"
 dependencies = ["py-fmt", "py-lint-fix", "py-type", "py-build"]
 
+[tasks.chat-py-ci]
+description = "Build and check the gemini_chat Python package (python/gemini-chat)"
+cwd = "python/gemini-chat"
+script = [
+    "uv sync --locked --extra dev",
+    "uv run --locked --extra dev maturin develop",
+    "uv run --locked --extra dev ruff format --check src tests",
+    "uv run --locked --extra dev ruff check src tests",
+    "uv run --locked --extra dev mypy src tests",
+    "uv run --locked --extra dev pytest -v",
+]
+
+[tasks.gesh-ci]
+description = "Check gesh (builds the nblm and gemini_chat Python SDKs)"
+cwd = "gesh"
+script = [
+    "uv sync --locked",
+    "uv run --locked ruff format --check src tests",
+    "uv run --locked ruff check src tests",
+    "uv run --locked mypy",
+    "uv run --locked pytest -v",
+]
+
 [tasks.py-setup]
 private = true
 condition = { files_modified = { input = [
