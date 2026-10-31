@@ -18,6 +18,16 @@ from gemini_chat import (
 
 ENGINE = "projects/123/locations/us/collections/default_collection/engines/search"
 SESSION = f"{ENGINE}/sessions/456"
+FOLDER = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs"
+
+
+def _hit(title: str, file: str, content: str | None) -> dict[str, object]:
+    data: dict[str, object] = {"title": title, "url": f"{FOLDER}/{file}?web=1"}
+    if content is None:
+        data["description"] = "<c0>snippet</c0> only"
+    else:
+        data["content"] = content
+    return {"document": {"name": f"docs/{title}", "structData": data}}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -43,6 +53,38 @@ class _Handler(BaseHTTPRequestHandler):
         assert self.headers["Authorization"] == "Bearer synthetic-token"
         assert self.headers["x-goog-user-project"] == "123"
         assert self.headers.get("Cookie") is None
+        if self.path.endswith("servingConfigs/default_search:search"):
+            self._send(
+                {
+                    "results": [
+                        _hit("A-0001", "a.txt", "Alpha text"),
+                        _hit("B-0002", "s/b.txt", None),
+                    ]
+                }
+            )
+            return
+        if self.path.endswith("servingConfigs/default_search:answer"):
+            self._send(
+                {
+                    "answer": {
+                        "state": "SUCCEEDED",
+                        "answerText": "Alpha answer.",
+                        "citations": [{"endIndex": "6", "sources": [{"referenceId": "0"}]}],
+                        "references": [
+                            {
+                                "chunkInfo": {
+                                    "content": "Alpha",
+                                    "documentMetadata": {
+                                        "uri": f"{FOLDER}/a.txt",
+                                        "title": "A-0001",
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                }
+            )
+            return
         if type(self).status != 200:
             self._send({"error": {"message": "sensitive server text"}})
             return
@@ -211,3 +253,39 @@ def test_public_api_and_token_providers_are_independent_of_nblm() -> None:
     with pytest.raises(TypeError, match="token_provider"):
         GeminiEnterpriseClient(object(), "123", "search")  # type: ignore[arg-type]
     assert "nblm" not in sys.modules
+
+
+def test_folder_search_and_answer(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    client = _client(monkeypatch, server)
+    found = client.search(
+        "alpha", sharepoint_folder=FOLDER + "/", data_store_ids=["sp_file"], page_size=5
+    )
+    assert found["query"] == f'(alpha) path:"{FOLDER}"'
+    assert [h["title"] for h in found["hits"]] == ["A-0001", "B-0002"]
+    assert found["hits"][1]["snippet"] == "snippet only"
+
+    answer = client.answer_in_folder(
+        "What does A say?",
+        search_terms="alpha",
+        sharepoint_folder=FOLDER,
+        data_store_ids=["sp_file"],
+    )
+    assert answer["answer"] == "Alpha answer."
+    assert answer["references"][0]["title"] == "A-0001"
+    assert answer["citations"][0]["reference_ids"] == [0]
+    assert [s["full_text"] for s in answer["sources"]] == [True, False]
+    assert any("snippets" in w for w in answer["warnings"])
+    sent = _Handler.requests[-1][2]
+    assert sent is not None
+    assert "searchResultList" in sent["searchSpec"]  # type: ignore[operator]
+
+
+def test_folder_validation_is_local(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    client = _client(monkeypatch, server)
+    with pytest.raises(GeminiChatError, match="sharing links"):
+        client.search("x", sharepoint_folder="https://example.sharepoint.com/:f:/s/eng/Eabc")
+    with pytest.raises(GeminiChatError, match="must not contain path:"):
+        client.search('x path:"https://example.sharepoint.com/sites/other"')
+    with pytest.raises(GeminiChatError, match="page size"):
+        client.search("x", page_size=101)
+    assert _Handler.requests == []
