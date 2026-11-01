@@ -13,12 +13,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "python/gemini-chat/**"
-      - "crates/gemini-chat/**"
-      - "crates/gemini-chat-python/**"
-      - ".github/workflows/gemini-chat-python-ci.yml"
-      - "Makefile.toml"
 
 env:
   CARGO_TERM_COLOR: always

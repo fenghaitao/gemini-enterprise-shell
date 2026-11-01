@@ -71,7 +71,7 @@ Then chat normally:
 
 ```text
 gesh[new]> Find the relevant design document and summarize the decision.
-gesh[SESSION]> What evidence supports that?
+gesh[16059694688619672760]> What evidence supports that?
 ```
 
 For a stronger SharePoint folder boundary, use folder mode. Retrieval is constrained to
