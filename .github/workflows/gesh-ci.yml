@@ -16,15 +16,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "gesh/**"
-      - "python/**"
-      - "crates/nblm-core/**"
-      - "crates/nblm-python/**"
-      - "crates/gemini-chat/**"
-      - "crates/gemini-chat-python/**"
-      - ".github/workflows/gesh-ci.yml"
-      - "Makefile.toml"
 
 env:
   CARGO_TERM_COLOR: always

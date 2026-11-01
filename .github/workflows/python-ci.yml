@@ -13,12 +13,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "python/**"
-      - "crates/nblm-python/**"
-      - "crates/nblm-core/**"
-      - ".github/workflows/python-ci.yml"
-      - "Makefile.toml"
 
 env:
   CARGO_TERM_COLOR: always
