@@ -371,7 +371,9 @@ async fn answer_uses_only_folder_files_and_prints_references() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unexpected argument '--session-id'"));
+        .stderr(predicate::str::contains(
+            "unexpected argument '--session-id'",
+        ));
 }
 
 #[tokio::test]

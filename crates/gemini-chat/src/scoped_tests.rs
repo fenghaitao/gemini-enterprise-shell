@@ -471,10 +471,7 @@ async fn folder_answer_session_and_answer_names_are_checked() {
         let c = client(&server).await;
         c.remember_folder_session_binding(SESSION, FOLDER, STORE)
             .unwrap();
-        let error = c
-            .answer_in_folder(request)
-            .await
-            .unwrap_err();
+        let error = c.answer_in_folder(request).await.unwrap_err();
         let message = error.to_string();
         assert!(
             message.contains("mismatch") || message.contains("invalid returned session"),
@@ -642,7 +639,9 @@ async fn continuing_folder_session_requires_trusted_local_binding() {
     request.session = Some("77".into());
     let error = c.answer_in_folder(request).await.unwrap_err();
     assert!(
-        error.to_string().contains("not created by this client instance"),
+        error
+            .to_string()
+            .contains("not created by this client instance"),
         "{error}"
     );
     assert!(server.received_requests().await.unwrap().is_empty());
