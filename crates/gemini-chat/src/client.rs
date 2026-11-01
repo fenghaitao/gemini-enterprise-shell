@@ -6,7 +6,7 @@
 //! answer is returned; a partial stream is never presented as a completed answer.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -19,6 +19,13 @@ use crate::{models::*, tls::TlsRoots, Error, Result, TokenProvider};
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_FRAMES: usize = 10_000;
+const MAX_FOLDER_SESSION_BINDINGS: usize = 1024;
+
+#[derive(Default)]
+struct FolderSessionRegistry {
+    bindings: HashMap<String, (String, String)>,
+    order: VecDeque<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct GeminiEnterpriseConfig {
@@ -96,8 +103,9 @@ pub struct GeminiEnterpriseClient {
     config: GeminiEnterpriseConfig,
     base_url: Url,
     /// Trusted provenance for folder sessions created by this client instance.
-    /// Clones share it; a fresh process intentionally starts empty.
-    folder_sessions: Arc<Mutex<HashMap<String, (String, String)>>>,
+    /// Clones share it; a fresh process intentionally starts empty. The registry is
+    /// bounded; evicted sessions fail closed and can no longer be continued.
+    folder_sessions: Arc<Mutex<FolderSessionRegistry>>,
 }
 
 impl GeminiEnterpriseClient {
@@ -116,7 +124,7 @@ impl GeminiEnterpriseClient {
             provider,
             config,
             base_url,
-            folder_sessions: Arc::new(Mutex::new(HashMap::new())),
+            folder_sessions: Arc::new(Mutex::new(FolderSessionRegistry::default())),
         })
     }
 
@@ -235,7 +243,7 @@ impl GeminiEnterpriseClient {
             .folder_sessions
             .lock()
             .map_err(|_| Error::Api("folder session registry unavailable".into()))?;
-        match bindings.get(session) {
+        match bindings.bindings.get(session) {
             Some((bound_folder, bound_datastore))
                 if bound_folder == folder && bound_datastore == datastore =>
             {
@@ -260,7 +268,7 @@ impl GeminiEnterpriseClient {
             .folder_sessions
             .lock()
             .map_err(|_| Error::Api("folder session registry unavailable".into()))?;
-        match bindings.get(session) {
+        match bindings.bindings.get(session) {
             Some((bound_folder, bound_datastore))
                 if bound_folder == folder && bound_datastore == datastore =>
             {
@@ -271,10 +279,19 @@ impl GeminiEnterpriseClient {
                     .into(),
             )),
             None => {
-                bindings.insert(
-                    session.to_string(),
-                    (folder.to_string(), datastore.to_string()),
-                );
+                while bindings.bindings.len() >= MAX_FOLDER_SESSION_BINDINGS {
+                    let Some(oldest) = bindings.order.pop_front() else {
+                        return Err(Error::Api(
+                            "folder session registry is internally inconsistent".into(),
+                        ));
+                    };
+                    bindings.bindings.remove(&oldest);
+                }
+                let session = session.to_string();
+                bindings.order.push_back(session.clone());
+                bindings
+                    .bindings
+                    .insert(session, (folder.to_string(), datastore.to_string()));
                 Ok(())
             }
         }

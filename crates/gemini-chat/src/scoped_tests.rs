@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use super::super::MAX_FOLDER_SESSION_BINDINGS;
 use super::*;
 use crate::{GeminiEnterpriseConfig, StaticTokenProvider};
 
@@ -679,6 +680,33 @@ async fn trusted_folder_session_is_bound_to_folder_and_datastore() {
         .contains("different folder or datastore"));
 
     assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn folder_session_registry_is_bounded_and_eviction_fails_closed() {
+    let server = MockServer::start().await;
+    let c = client(&server).await;
+
+    for i in 0..=MAX_FOLDER_SESSION_BINDINGS {
+        let session = format!("{ENGINE}/sessions/s{i}");
+        c.remember_folder_session_binding(&session, FOLDER, STORE)
+            .unwrap();
+    }
+
+    let registry = c.folder_sessions.lock().unwrap();
+    assert_eq!(registry.bindings.len(), MAX_FOLDER_SESSION_BINDINGS);
+    assert_eq!(registry.order.len(), MAX_FOLDER_SESSION_BINDINGS);
+    drop(registry);
+
+    let evicted = format!("{ENGINE}/sessions/s0");
+    let newest = format!("{ENGINE}/sessions/s{MAX_FOLDER_SESSION_BINDINGS}");
+    assert!(c
+        .require_folder_session_binding(&evicted, FOLDER, STORE)
+        .unwrap_err()
+        .to_string()
+        .contains("not created by this client instance"));
+    c.require_folder_session_binding(&newest, FOLDER, STORE)
+        .unwrap();
 }
 
 #[tokio::test]
