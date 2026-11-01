@@ -305,8 +305,7 @@ class Shell:
             )
         if len(self.config.data_stores) != 1:
             raise ShellError(
-                "a folder-scoped answer needs exactly one datastore: "
-                "use /ds clear, then /ds add ID"
+                "a folder-scoped answer needs exactly one datastore: use /ds clear, then /ds add ID"
             )
         chat = self.chat
         data_stores = list(self.config.data_stores)
@@ -581,8 +580,7 @@ class Shell:
         folder = self.config.sharepoint_folder
         if folder and len(self.config.data_stores) != 1:
             raise ShellError(
-                "a folder-scoped search needs exactly one datastore: "
-                "use /ds clear, then /ds add ID"
+                "a folder-scoped search needs exactly one datastore: use /ds clear, then /ds add ID"
             )
         data_stores = list(self.config.data_stores) or None
         results = self._run(
