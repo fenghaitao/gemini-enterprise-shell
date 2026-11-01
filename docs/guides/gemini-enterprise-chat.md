@@ -218,9 +218,11 @@ Limits:
 - Sessions: the first folder `answer` creates a server session. The service does
   **not** persist an attested folder scope on that session, so saved-session readback is
   not used as proof. The client instead binds sessions it creates to the normalized
-  folder and datastore in memory; clones share that registry. A continuation from a
-  fresh client/process, a different folder, or a different datastore is rejected before
-  network I/O. Each accepted turn then runs its own folder-scoped search and sends only
+  folder and datastore in memory; clones share that registry. The registry keeps the
+  most recent 1024 folder sessions; older entries are evicted and then fail closed like
+  sessions from a fresh client. A continuation from a fresh client/process, a different
+  folder, or a different datastore is rejected before network I/O. Each accepted turn
+  then runs its own folder-scoped search and sends only
   those files. Give each follow-up its own search terms (shorthand questions like
   "which die?" make poor keywords). Server readback remains available with
   `gemini-chat session`, but is informational rather than an isolation proof.
