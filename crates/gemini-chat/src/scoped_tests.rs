@@ -677,15 +677,16 @@ async fn continuing_folder_session_rejects_cross_folder_or_chat_history_before_s
             .answer_in_folder(request)
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("not verifiably scoped"), "{error}");
         assert!(
-            server
-                .received_requests()
-                .await
-                .unwrap()
-                .iter()
-                .all(|request| request.method.as_str() == "GET")
+            error.to_string().contains("not verifiably scoped"),
+            "{error}"
         );
+        assert!(server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .all(|request| request.method.as_str() == "GET"));
     }
 }
 
