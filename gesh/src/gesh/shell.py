@@ -40,7 +40,7 @@ HELP = """\
                           follow-ups continue it, each turn searches the folder again)
   /folder off             Back to normal chat     /folder   show the current folder
   /new, /history          In folder mode: start a new / read back the folder session
-  /session                 In folder mode: show the current trusted folder session
+  /session                In folder mode: show the current trusted folder session
   /terms KEYWORDS         Keywords that find the files (every word must match)
   /search [TERMS]         List matching files (uses /folder; no generation)
                           Folder mode requires exactly one datastore.

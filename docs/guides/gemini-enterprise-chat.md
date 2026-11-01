@@ -218,9 +218,9 @@ Limits:
 - Sessions: the first folder `answer` creates a server session. The service does
   **not** persist an attested folder scope on that session, so saved-session readback is
   not used as proof. The client instead binds sessions it creates to the normalized
-  folder and datastore in memory; clones share that registry. The registry keeps the
-  most recent 1024 folder sessions; older entries are evicted and then fail closed like
-  sessions from a fresh client. A continuation from a fresh client/process, a different
+  folder and datastore in memory; clones share that registry. The registry holds up to
+  1024 folder sessions and evicts the oldest-created first (continuing a session does not
+  refresh it); an evicted session fails closed like one from a fresh client. A continuation from a fresh client/process, a different
   folder, or a different datastore is rejected before network I/O. Each accepted turn
   then runs its own folder-scoped search and sends only
   those files. Give each follow-up its own search terms (shorthand questions like
