@@ -112,30 +112,76 @@ verified; returning a server session is not proof of that.
 
 `ask` (streamAssist) cannot be restricted to a folder: a folder named in the question
 only steers retrieval, and the assistant may search elsewhere or answer from memory.
-For a server-enforced scope, use the two-step commands instead:
+For a server-enforced scope, use the two-step commands instead.
+
+### End to end
+
+**1. Log in and configure** (once per shell; the login expires on the organization's
+reauthentication schedule, and the tools then report "run `gcloud auth login`"):
 
 ```sh
-# Search only (no generation). Every word must match, so use keywords.
-gemini-chat --json search \
-  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
-  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
-  sync handshake
+gcloud auth login                       # in the browser profile of your work account
+make install-chat                       # or: cargo install --path crates/gemini-chat-cli
+export GEMINI_CHAT_PROJECT_NUMBER=YOUR_PROJECT_NUMBER
+export GEMINI_CHAT_LOCATION=us           # the engine's own location: global, us or eu
+export GEMINI_CHAT_ENGINE_ID=YOUR_ENGINE_ID
+# Behind a TLS-inspecting proxy: export GEMINI_CHAT_CA_BUNDLE=/path/to/ca-bundle.pem
+```
 
-# Answer only from the matching files in that folder (one generation).
-gemini-chat answer \
-  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
+**2. Find the SharePoint file datastore ID.** Reading the engine works even without
+permission to list engines or datastores; it returns the attached datastore IDs. The
+SharePoint connector has one per entity type; use the one ending in `_file`:
+
+```sh
+curl -sS -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "x-goog-user-project: $GEMINI_CHAT_PROJECT_NUMBER" \
+  "https://$GEMINI_CHAT_LOCATION-discoveryengine.googleapis.com/v1/projects/$GEMINI_CHAT_PROJECT_NUMBER/locations/$GEMINI_CHAT_LOCATION/collections/default_collection/engines/$GEMINI_CHAT_ENGINE_ID" \
+  | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["dataStoreIds"]))'
+# e.g. sharepoint_connector_ab12cd_file   <- use this one
+export DS=sharepoint_connector_ab12cd_file
+```
+
+(For `global`, the host is `discoveryengine.googleapis.com` without a prefix.)
+
+**3. Copy the folder URL** from the browser address bar while viewing the folder in
+SharePoint, for example
+`https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs`. Library views
+(`…/Forms/AllItems.aspx?id=…`) also work; sharing links (`…/:f:/…`) do not.
+
+**4. Search, answer, follow up, read back:**
+
+```sh
+F='https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs'
+
+# a) Which files match? (no generation; every word must match, so use keywords)
+gemini-chat search --sharepoint-folder "$F" --data-store-id "$DS" sync handshake
+
+# b) Answer only from the matching files in that folder (one generation).
+#    Prints the answer, `Session: …`, the files used and the references.
+gemini-chat answer --sharepoint-folder "$F" --data-store-id "$DS" \
   --search-terms 'sync handshake' \
-  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
   'In two sentences, what does the spec say the handshake does?'
 
-# Follow up in the same conversation: pass the printed Session. Give keywords for
-# this turn; the folder is searched again and only those files are sent.
-gemini-chat answer --session-id SESSION_ID \
-  --sharepoint-folder 'https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs' \
+# c) Follow up in the same conversation with the printed session and keywords for
+#    this turn. The saved history is verified to be in this folder first; then the
+#    folder is searched again and only those files are sent.
+gemini-chat answer --session-id SESSION_ID --sharepoint-folder "$F" --data-store-id "$DS" \
   --search-terms 'handshake root die' \
-  --data-store-id YOUR_SHAREPOINT_FILE_DATASTORE_ID \
   'Shorten your previous answer, then say which die drives the ack.'
+
+# d) Read the conversation back (no generation).
+gemini-chat session --session-id SESSION_ID
 ```
+
+Add `--json` to any command for machine-readable output. The same flow is available
+in Python (`GeminiEnterpriseClient.search` / `.answer_in_folder(..., session_id=...)`,
+see the `gemini_chat` package README) and interactively in gesh (`/folder`, `/terms`,
+`/search`, then plain questions; see `gesh/README.md`).
+
+What to check in the output: `References` (every one is inside the folder and was
+supplied in that turn, or the command fails) and the warnings: "more files may match"
+(narrow the keywords or raise `--page-size`) and "N of M files were sent as short
+snippets only" (only about 5 files arrive with full text).
 
 How it works:
 
