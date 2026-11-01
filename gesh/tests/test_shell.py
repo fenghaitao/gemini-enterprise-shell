@@ -606,8 +606,13 @@ def test_session_command_is_folder_aware() -> None:
     shell.handle("/session")
     assert "No folder session yet" in out.getvalue()
     shell.handle("/session 55")
-    assert shell.folder_session == f"{ENGINE}/sessions/55"
+    assert shell.last_command_failed
+    assert "cannot be imported by ID" in out.getvalue()
+    assert shell.folder_session is None
     assert shell.session == f"{ENGINE}/sessions/9"  # chat session untouched
     shell.handle("/terms alpha")
-    shell.handle("follow-up")
-    assert chat.calls[-1]["session_id"] == f"{ENGINE}/sessions/55"
+    shell.handle("first scoped question")
+    assert chat.calls[-1]["session_id"] is None
+    assert shell.folder_session
+    shell.handle("/session")
+    assert "Current folder session:" in out.getvalue()

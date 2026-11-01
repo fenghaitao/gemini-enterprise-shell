@@ -40,6 +40,7 @@ HELP = """\
                           follow-ups continue it, each turn searches the folder again)
   /folder off             Back to normal chat     /folder   show the current folder
   /new, /history          In folder mode: start a new / read back the folder session
+  /session                 In folder mode: show the current trusted folder session
   /terms KEYWORDS         Keywords that find the files (every word must match)
   /search [TERMS]         List matching files (uses /folder; no generation)
                           Folder mode requires exactly one datastore.
@@ -470,24 +471,15 @@ class Shell:
         self.console.print(Text("Continuing this session.", style="dim"))
 
     def _cmd_folder_session(self, args: list[str]) -> None:
-        if not args:
-            if self.folder_session:
-                self.console.print(f"Current folder session: {self.folder_session}")
-            else:
-                self.console.print("No folder session yet; the next question creates one.")
-            return
-        session = self._run(lambda: self.chat.get_session(args[0]), "Reading session")
-        self._folder_epoch += 1
-        self.folder_session = session.get("name") or args[0]
-        self.last_folder_answer = None
-        render.render_session(self.console, session)
-        self.console.print(
-            Text(
-                "Selected this folder session. Its saved history is verified against "
-                "the current folder before the next question.",
-                style="dim",
+        if args:
+            raise ShellError(
+                "folder sessions cannot be imported by ID; only sessions created in this "
+                "gesh process have trusted folder provenance"
             )
-        )
+        if self.folder_session:
+            self.console.print(f"Current folder session: {self.folder_session}")
+        else:
+            self.console.print("No folder session yet; the next question creates one.")
 
     def cmd_history(self, args: list[str]) -> None:
         session_id = self.folder_session if self.config.sharepoint_folder else self.session

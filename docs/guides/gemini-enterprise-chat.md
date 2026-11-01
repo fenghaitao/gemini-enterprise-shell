@@ -148,7 +148,7 @@ SharePoint, for example
 `https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs`. Library views
 (`…/Forms/AllItems.aspx?id=…`) also work; sharing links (`…/:f:/…`) do not.
 
-**4. Search, answer, follow up, read back:**
+**4. Search and answer from the CLI:**
 
 ```sh
 F='https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs'
@@ -162,21 +162,16 @@ gemini-chat answer --sharepoint-folder "$F" --data-store-id "$DS" \
   --search-terms 'sync handshake' \
   'In two sentences, what does the spec say the handshake does?'
 
-# c) Follow up in the same conversation with the printed session and keywords for
-#    this turn. The saved history is verified to be in this folder first; then the
-#    folder is searched again and only those files are sent.
-gemini-chat answer --session-id SESSION_ID --sharepoint-folder "$F" --data-store-id "$DS" \
-  --search-terms 'handshake root die' \
-  'Shorten your previous answer, then say which die drives the ack.'
-
-# d) Read the conversation back (no generation).
+# c) Read the server session back (no generation).
 gemini-chat session --session-id SESSION_ID
 ```
 
-Add `--json` to any command for machine-readable output. The same flow is available
-in Python (`GeminiEnterpriseClient.search` / `.answer_in_folder(..., session_id=...)`,
-see the `gemini_chat` package README) and interactively in gesh (`/folder`, `/terms`,
-`/search`, then plain questions; see `gesh/README.md`).
+Add `--json` to any command for machine-readable output. Folder-answer continuation
+is intentionally **not** exposed by the one-shot CLI: a fresh process cannot prove how
+an arbitrary server session was originally scoped. For strict multi-turn folder chat,
+use one long-lived Python `GeminiEnterpriseClient` instance
+(`.answer_in_folder(..., session_id=...)`) or gesh (`/folder`, `/terms`, then plain
+questions). Both keep trusted session-to-folder provenance in the client process.
 
 What to check in the output: `References` (every one is inside the folder and was
 supplied in that turn, or the command fails) and the warnings: "more files may match"
@@ -201,9 +196,11 @@ How it works:
    A citation of any other file, even one inside the folder, fails the call.
 
 The contract per turn: retrieval and references are limited to this turn's search
-results. In a multi-turn session the model also sees the earlier turns, so wording may
-build on earlier answers; those were folder-scoped too, but their files are not
-re-checked as this turn's references.
+results. For multi-turn use, the client records the session's normalized folder and
+datastore when it creates the session. A continuation is accepted only by that same
+client instance and only for the same folder and datastore. This request provenance,
+not the presence of citations, is the trust boundary, so a successful scoped answer
+with zero structured references can still be continued safely.
 
 Folder URLs: paste the browser address of the folder, with or without a trailing slash,
 with literal or `%20` spaces, or the library view (`…/Forms/AllItems.aspx?id=/sites/…`).
@@ -218,16 +215,15 @@ Limits:
   warning says when the limit was reached.
 - Search returns full text for only about the top 5 files; the rest are sent as short
   snippets, and a warning reports how many.
-- Sessions: the first `answer` creates a server session (`Session:` in the output).
-  The service does **not** store folder scope on that session. Therefore `--session-id`
-  first reads the saved session with answer details and rejects it unless every prior turn
-  is verifiably a folder Answer whose references are inside the requested folder. This
-  prevents a session from another folder (or a normal `ask` session) from carrying
-  out-of-scope history into the answer. Continuing a folder session consequently requires
-  session-read permission. After validation, every turn runs its own folder-scoped search
-  and sends only those files; give each follow-up its own `--search-terms` (shorthand
-  questions like "which die?" make poor keywords). Readback works with
-  `gemini-chat session`; these turns carry `detailedAnswer` and no `model_id`.
+- Sessions: the first folder `answer` creates a server session. The service does
+  **not** persist an attested folder scope on that session, so saved-session readback is
+  not used as proof. The client instead binds sessions it creates to the normalized
+  folder and datastore in memory; clones share that registry. A continuation from a
+  fresh client/process, a different folder, or a different datastore is rejected before
+  network I/O. Each accepted turn then runs its own folder-scoped search and sends only
+  those files. Give each follow-up its own search terms (shorthand questions like
+  "which die?" make poor keywords). Server readback remains available with
+  `gemini-chat session`, but is informational rather than an isolation proof.
 - `answer` has no `--model` option. A question the Answer API declines (for example
   small talk) is reported as skipped; if no file matches, the Answer API is not called
   at all.

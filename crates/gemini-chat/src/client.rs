@@ -5,7 +5,11 @@
 //! Responses are bounded and buffered to EOF before a named terminal SUCCEEDED
 //! answer is returned; a partial stream is never presented as a completed answer.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use reqwest::{redirect::Policy, Client, Method, Url};
 use serde::Deserialize;
@@ -91,6 +95,9 @@ pub struct GeminiEnterpriseClient {
     provider: Arc<dyn TokenProvider>,
     config: GeminiEnterpriseConfig,
     base_url: Url,
+    /// Trusted provenance for folder sessions created by this client instance.
+    /// Clones share it; a fresh process intentionally starts empty.
+    folder_sessions: Arc<Mutex<HashMap<String, (String, String)>>>,
 }
 
 impl GeminiEnterpriseClient {
@@ -109,6 +116,7 @@ impl GeminiEnterpriseClient {
             provider,
             config,
             base_url,
+            folder_sessions: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -215,6 +223,61 @@ impl GeminiEnterpriseClient {
         let id = value.strip_prefix(&prefix).unwrap_or(value);
         validate_segment(id, "datastore")?;
         Ok(format!("{prefix}{id}"))
+    }
+
+    fn require_folder_session_binding(
+        &self,
+        session: &str,
+        folder: &str,
+        datastore: &str,
+    ) -> Result<()> {
+        let bindings = self
+            .folder_sessions
+            .lock()
+            .map_err(|_| Error::Api("folder session registry unavailable".into()))?;
+        match bindings.get(session) {
+            Some((bound_folder, bound_datastore))
+                if bound_folder == folder && bound_datastore == datastore =>
+            {
+                Ok(())
+            }
+            Some(_) => Err(Error::validation(
+                "cannot continue folder session in a different folder or datastore; start a new folder session",
+            )),
+            None => Err(Error::validation(
+                "cannot continue folder session: it was not created by this client instance; start a new folder session",
+            )),
+        }
+    }
+
+    fn remember_folder_session_binding(
+        &self,
+        session: &str,
+        folder: &str,
+        datastore: &str,
+    ) -> Result<()> {
+        let mut bindings = self
+            .folder_sessions
+            .lock()
+            .map_err(|_| Error::Api("folder session registry unavailable".into()))?;
+        match bindings.get(session) {
+            Some((bound_folder, bound_datastore))
+                if bound_folder == folder && bound_datastore == datastore =>
+            {
+                Ok(())
+            }
+            Some(_) => Err(Error::Api(
+                "returned folder session is already bound to a different folder or datastore"
+                    .into(),
+            )),
+            None => {
+                bindings.insert(
+                    session.to_string(),
+                    (folder.to_string(), datastore.to_string()),
+                );
+                Ok(())
+            }
+        }
     }
 
     fn request_body(&self, request: &AssistRequest) -> Result<(Value, Option<String>)> {
