@@ -236,8 +236,9 @@ impl GeminiEnterpriseClient {
 
     /// Answer only from files in one SharePoint folder: a folder-scoped search with
     /// `search_terms` (keywords), then the Answer API with just those files (one
-    /// generation). Starts a session, or continues `session_id`; every turn searches the
-    /// folder again. Raises if anything outside the folder is returned or cited.
+    /// generation). Starts a session, or continues a `session_id` previously created by
+    /// this client instance; every turn searches the folder again. Arbitrary/cross-process
+    /// session IDs are rejected. Raises if anything outside the folder is returned or cited.
     #[pyo3(signature = (question, *, search_terms, sharepoint_folder, data_store_ids, page_size=10, session_id=None))]
     #[allow(clippy::too_many_arguments)]
     fn answer_in_folder(

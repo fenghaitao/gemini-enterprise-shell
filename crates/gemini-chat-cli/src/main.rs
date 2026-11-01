@@ -90,8 +90,8 @@ enum Command {
     /// that folder by SharePoint and re-checked locally.
     Search(SearchArgs),
     /// Answer only from files in one SharePoint folder: a folder-scoped search with
-    /// --search-terms, then an answer from just those files (one generation). Starts a
-    /// session; continue it with --session-id (each turn searches the folder again).
+    /// --search-terms, then an answer from just those files (one generation). The CLI
+    /// is single-turn; use gesh or the Python client for trusted multi-turn sessions.
     Answer(FolderAnswerArgs),
 }
 
@@ -125,9 +125,6 @@ struct FolderAnswerArgs {
     /// Files to retrieve, 1-100. Only about the top 5 arrive with full text.
     #[arg(long, default_value_t = 10)]
     page_size: u32,
-    /// Continue a folder-answer session (ID or full name) from an earlier `answer`.
-    #[arg(long, value_name = "ID")]
-    session_id: Option<String>,
     question: String,
 }
 
@@ -221,7 +218,6 @@ async fn run(cli: Cli) -> Result<()> {
             let mut request = FolderAnswerRequest::new(args.question, args.search_terms, folder);
             request.data_stores = vec![args.data_store];
             request.page_size = args.page_size;
-            request.session = args.session_id;
             let answer = client.answer_in_folder(request).await?;
             emit_folder_answer(&answer, global.json)?;
         }

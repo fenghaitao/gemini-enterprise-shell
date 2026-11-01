@@ -372,5 +372,21 @@ def test_folder_answers_continue_a_session(monkeypatch: pytest.MonkeyPatch, serv
     assert answer_sessions[0].endswith("/sessions/-")
     assert answer_sessions[1] == first["session"]
     gets = [r for r in _Handler.requests if r[0] == "GET"]
-    assert any("/sessions/900?includeAnswerDetails=true" in r[1] for r in gets)
+    # Continuation trusts only this client instance; no readback attestation.
+    assert gets == []
     assert len(searches) == 2  # every turn searches the folder again
+
+
+def test_folder_session_cannot_be_imported_into_a_fresh_client(
+    monkeypatch: pytest.MonkeyPatch, server: str
+) -> None:
+    client = _client(monkeypatch, server)
+    with pytest.raises(GeminiChatError, match="not created by this client instance"):
+        client.answer_in_folder(
+            "Follow up",
+            search_terms="alpha",
+            sharepoint_folder=FOLDER,
+            data_store_ids=["sp"],
+            session_id="900",
+        )
+    assert _Handler.requests == []

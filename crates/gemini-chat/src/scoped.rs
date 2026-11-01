@@ -6,8 +6,8 @@
 //! server-side search runs. Every returned URL is re-checked against the folder and
 //! anything outside it fails the call. Answers run in a server session so follow-ups
 //! can use the history. Because the service does not store folder scope in a session,
-//! every continuation first verifies its saved history against the requested folder,
-//! then searches that folder again and sends only those files.
+//! continuations are accepted only for sessions created and bound to the same folder
+//! and datastore by this client instance; every turn then searches the folder again.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -79,13 +79,13 @@ pub struct FolderAnswerRequest {
     /// Keywords used to find the files (not the question; see [`SearchRequest::terms`]).
     pub search_terms: String,
     pub folder: SharePointFolder,
-    /// Datastores to search; at least one (e.g. the SharePoint file datastore).
+    /// Exactly one datastore: the SharePoint file datastore for this folder.
     pub data_stores: Vec<String>,
     /// Files to retrieve, 1-100 (default 10).
     pub page_size: u32,
-    /// Continue this folder-answer session (ID or full name); `None` starts a new one.
-    /// The folder scope is not stored in the session: every turn searches the folder
-    /// again and sends only those files.
+    /// Continue a folder-answer session created by this client instance; `None`
+    /// starts a new one. Server session readback does not attest folder scope, so
+    /// arbitrary/cross-process session IDs are intentionally rejected.
     pub session: Option<String>,
 }
 
@@ -241,14 +241,14 @@ impl GeminiEnterpriseClient {
                 "a folder-scoped answer needs exactly one datastore (the SharePoint file datastore)",
             ));
         }
+        let datastore = self.datastore_resource(&request.data_stores[0])?;
         let requested_session = request
             .session
             .as_deref()
             .map(|s| self.session_resource(s))
             .transpose()?;
         if let Some(session) = &requested_session {
-            self.validate_folder_session_scope(session, &request.folder)
-                .await?;
+            self.require_folder_session_binding(session, request.folder.url(), &datastore)?;
         }
         let mut search = SearchRequest::new(request.search_terms);
         search.folder = Some(request.folder.clone());
@@ -320,7 +320,32 @@ impl GeminiEnterpriseClient {
             }
             Ok(canonical)
         };
-        let mut answer = parse_folder_answer(&bytes, &request.folder, &allowed, &check_session)?;
+        let parsed = parse_folder_answer(&bytes, &request.folder, &allowed, &check_session);
+        let mut answer = match parsed {
+            Ok(answer) => answer,
+            Err(error) => {
+                let session = match &error {
+                    Error::Skipped {
+                        session: Some(session),
+                        ..
+                    }
+                    | Error::Assist {
+                        session: Some(session),
+                        ..
+                    } => Some(session.as_str()),
+                    _ => None,
+                };
+                if let Some(session) = session {
+                    self.remember_folder_session_binding(
+                        session,
+                        request.folder.url(),
+                        &datastore,
+                    )?;
+                }
+                return Err(error);
+            }
+        };
+        self.remember_folder_session_binding(&answer.session, request.folder.url(), &datastore)?;
         answer.search_query = found.query;
         answer.sources = sources;
         answer.warnings.extend(found.warnings);
@@ -332,50 +357,6 @@ impl GeminiEnterpriseClient {
             ));
         }
         Ok(answer)
-    }
-
-    /// The service does not persist folder scope on a session. Before reusing one,
-    /// fail closed unless every prior turn is a folder Answer whose saved references
-    /// are verifiably inside the requested folder.
-    async fn validate_folder_session_scope(
-        &self,
-        session: &str,
-        folder: &SharePointFolder,
-    ) -> Result<()> {
-        let saved = self.get_session(session, true).await?;
-        let invalid = || {
-            Error::validation(concat!(
-                "cannot continue folder session: prior session history is not verifiably scoped ",
-                "to this folder; start a new folder session"
-            ))
-        };
-        for turn in saved.turns {
-            if turn.answer.is_none()
-                || turn.detailed_answer.is_none()
-                || turn.detailed_assist_answer.is_some()
-            {
-                return Err(invalid());
-            }
-            let Some(detail) = turn.detailed_answer.as_ref() else {
-                return Err(invalid());
-            };
-            let Some(references) = detail.get("references").and_then(Value::as_array) else {
-                return Err(invalid());
-            };
-            if references.is_empty() {
-                return Err(invalid());
-            }
-            for reference in references {
-                let uri = reference
-                    .pointer("/chunkInfo/documentMetadata/uri")
-                    .or_else(|| reference.pointer("/unstructuredDocumentInfo/uri"))
-                    .and_then(Value::as_str);
-                if !uri.is_some_and(|uri| folder.contains(uri)) {
-                    return Err(invalid());
-                }
-            }
-        }
-        Ok(())
     }
 
     async fn post_serving_config(

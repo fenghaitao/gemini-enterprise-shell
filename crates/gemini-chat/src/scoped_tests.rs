@@ -60,29 +60,6 @@ fn answer_response(uri: &str) -> Value {
     }, "answerQueryToken": "tok"})
 }
 
-fn folder_session_response(uri: &str) -> Value {
-    json!({"name": SESSION, "turns": [{
-        "query": {"text": "earlier folder question"},
-        "answer": format!("{SESSION}/answers/1"),
-        "detailedAnswer": {
-            "name": format!("{SESSION}/answers/1"),
-            "state": "SUCCEEDED",
-            "answerText": "Earlier folder answer.",
-            "references": [{"chunkInfo": {"documentMetadata": {
-                "uri": uri, "title": "earlier"
-            }}}]
-        }
-    }]})
-}
-
-async fn mount_folder_session(server: &MockServer, uri: &str) {
-    Mock::given(method("GET"))
-        .and(path(format!("/v1/{SESSION}")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(folder_session_response(uri)))
-        .mount(server)
-        .await;
-}
-
 async fn mount_search(server: &MockServer, response: Value) {
     Mock::given(method("POST"))
         .and(path(format!(
@@ -426,7 +403,6 @@ fn citation_offsets_are_parsed_strictly() {
 async fn folder_answers_create_and_continue_a_session_rescoping_every_turn() {
     let server = MockServer::start().await;
     mount_search(&server, search_response()).await;
-    mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
     Mock::given(method("POST"))
         .and(path(format!(
             "/v1/{ENGINE}/servingConfigs/default_search:answer"
@@ -479,7 +455,6 @@ async fn folder_answer_session_and_answer_names_are_checked() {
     ] {
         let server = MockServer::start().await;
         mount_search(&server, search_response()).await;
-        mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
         let mut response = answer_response(&format!("{FOLDER}/sub/A-0001.txt"));
         response["session"]["name"] = json!(session);
         response["answer"]["name"] = json!(answer_name);
@@ -493,8 +468,10 @@ async fn folder_answer_session_and_answer_names_are_checked() {
         let mut request = FolderAnswerRequest::new("q?", "sync", folder());
         request.data_stores = vec!["sp_file".into()];
         request.session = Some("77".into());
-        let error = client(&server)
-            .await
+        let c = client(&server).await;
+        c.remember_folder_session_binding(SESSION, FOLDER, STORE)
+            .unwrap();
+        let error = c
             .answer_in_folder(request)
             .await
             .unwrap_err();
@@ -614,7 +591,6 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
     ] {
         let server = MockServer::start().await;
         mount_search(&server, search_response()).await;
-        mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
         Mock::given(method("POST"))
             .and(path(format!(
                 "/v1/{ENGINE}/servingConfigs/default_search:answer"
@@ -628,7 +604,10 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
         let mut request = FolderAnswerRequest::new("q?", "sync", folder());
         request.data_stores = vec!["sp_file".into()];
         request.session = Some("77".into()); // continuing a different session
-        match client(&server).await.answer_in_folder(request).await {
+        let c = client(&server).await;
+        c.remember_folder_session_binding(SESSION, FOLDER, STORE)
+            .unwrap();
+        match c.answer_in_folder(request).await {
             Err(Error::Api(reason)) => assert!(reason.contains("mismatch"), "{reason}"),
             other => panic!("expected a session mismatch, got {other:?}"),
         }
@@ -636,7 +615,6 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
     // A matching session is attached to the skip as before.
     let server = MockServer::start().await;
     mount_search(&server, search_response()).await;
-    mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
     Mock::given(method("POST"))
         .and(path(format!("/v1/{ENGINE}/servingConfigs/default_search:answer")))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"session": {"name": SESSION},
@@ -646,48 +624,96 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
     let mut request = FolderAnswerRequest::new("q?", "sync", folder());
     request.data_stores = vec!["sp_file".into()];
     request.session = Some("77".into());
-    match client(&server).await.answer_in_folder(request).await {
+    let c = client(&server).await;
+    c.remember_folder_session_binding(SESSION, FOLDER, STORE)
+        .unwrap();
+    match c.answer_in_folder(request).await {
         Err(Error::Skipped { session, .. }) => assert_eq!(session.as_deref(), Some(SESSION)),
         other => panic!("expected Skipped, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn continuing_folder_session_rejects_cross_folder_or_chat_history_before_search() {
-    let other = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Other/a.txt";
-    for session_response in [
-        folder_session_response(other),
-        json!({"name": SESSION, "turns": [{
-            "query": {"text": "ordinary chat"},
-            "queryConfig": {"google.discoveryengine.googleapis.com.Assistant.model_id": "m1"},
-            "detailedAssistAnswer": {"replies": []}
-        }]}),
-    ] {
-        let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path(format!("/v1/{SESSION}")))
-            .respond_with(ResponseTemplate::new(200).set_body_json(session_response))
-            .mount(&server)
-            .await;
-        let mut request = FolderAnswerRequest::new("q?", "sync", folder());
-        request.data_stores = vec!["sp_file".into()];
-        request.session = Some("77".into());
-        let error = client(&server)
-            .await
-            .answer_in_folder(request)
-            .await
-            .unwrap_err();
-        assert!(
-            error.to_string().contains("not verifiably scoped"),
-            "{error}"
-        );
-        assert!(server
-            .received_requests()
-            .await
-            .unwrap()
-            .iter()
-            .all(|request| request.method.as_str() == "GET"));
-    }
+async fn continuing_folder_session_requires_trusted_local_binding() {
+    let server = MockServer::start().await;
+    let c = client(&server).await;
+    let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+    request.data_stores = vec!["sp_file".into()];
+    request.session = Some("77".into());
+    let error = c.answer_in_folder(request).await.unwrap_err();
+    assert!(
+        error.to_string().contains("not created by this client instance"),
+        "{error}"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn trusted_folder_session_is_bound_to_folder_and_datastore() {
+    let server = MockServer::start().await;
+    let c = client(&server).await;
+    c.remember_folder_session_binding(SESSION, FOLDER, STORE)
+        .unwrap();
+
+    let other = SharePointFolder::parse(
+        "https://example.sharepoint.com/sites/eng/Shared%20Documents/Other",
+    )
+    .unwrap();
+    let mut wrong_folder = FolderAnswerRequest::new("q?", "sync", other);
+    wrong_folder.data_stores = vec!["sp_file".into()];
+    wrong_folder.session = Some("77".into());
+    assert!(c
+        .answer_in_folder(wrong_folder)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("different folder or datastore"));
+
+    let mut wrong_store = FolderAnswerRequest::new("q?", "sync", folder());
+    wrong_store.data_stores = vec!["other_store".into()];
+    wrong_store.session = Some("77".into());
+    assert!(c
+        .answer_in_folder(wrong_store)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("different folder or datastore"));
+
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn folder_session_without_structured_references_can_continue() {
+    let server = MockServer::start().await;
+    mount_search(&server, search_response()).await;
+    let response = json!({"session": {"name": SESSION}, "answer": {
+        "name": format!("{SESSION}/answers/88"),
+        "state": "SUCCEEDED",
+        "answerText": "Scoped answer without references.",
+        "citations": [],
+        "references": []
+    }});
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/{ENGINE}/servingConfigs/default_search:answer"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let c = client(&server).await;
+    let mut first = FolderAnswerRequest::new("q1?", "sync", folder());
+    first.data_stores = vec!["sp_file".into()];
+    let first = c.answer_in_folder(first).await.unwrap();
+    assert!(first.references.is_empty());
+
+    let mut follow = FolderAnswerRequest::new("q2?", "sync", folder());
+    follow.data_stores = vec!["sp_file".into()];
+    follow.session = Some(first.session);
+    c.answer_in_folder(follow).await.unwrap();
+
+    assert_eq!(bodies(&server, ":answer").await.len(), 2);
 }
 
 #[tokio::test]

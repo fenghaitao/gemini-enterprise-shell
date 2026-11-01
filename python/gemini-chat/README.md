@@ -36,8 +36,13 @@ print(scoped["answer"], [r["uri"] for r in scoped["references"]], scoped["warnin
 follow_up = client.answer_in_folder(
     "Shorten that.", search_terms="sync handshake", sharepoint_folder=folder,
     data_store_ids=["your-sharepoint-file-datastore"], session_id=scoped["session"],
-)   # verifies saved history is in this folder, then searches the folder again
+)   # trusted because the same client created the session; searches the folder again
 ```
+
+Folder-session provenance is intentionally client-local: only a session created earlier
+by the same `GeminiEnterpriseClient` instance can be continued. A fresh process/client
+cannot safely attest the original folder scope, so importing an arbitrary session ID is
+rejected.
 
 Token providers: `GcloudTokenProvider()` (`gcloud auth print-access-token`) or
 `EnvTokenProvider()` (reads `GEMINI_CHAT_ACCESS_TOKEN`). Failures raise

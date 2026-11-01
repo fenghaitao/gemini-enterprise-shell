@@ -115,9 +115,10 @@ gesh[folder:Specs]> /folder off                   # back to normal chat (its ses
 | `/terms KEYWORDS`, `/terms off` | Keywords that find files in the folder |
 | `/search [TERMS]` | Matching files (in the folder if set), full text or snippet |
 
-In folder mode, `/session` shows the folder session and `/session ID` switches to an
-earlier folder session; before the next question its saved history is verified to be
-inside the current folder, so a chat session or another folder's session is refused.
+In folder mode, `/session` shows the current folder session. `/session ID` is
+intentionally refused: folder-session provenance is trusted only for sessions created
+by the current gesh process, so an arbitrary server session cannot import history from
+another folder.
 
 Also `--sharepoint-folder` / `--search-terms` (or `GESH_SHAREPOINT_FOLDER` /
 `GESH_SEARCH_TERMS`). At most 100 files per search; only about 5 arrive with full text,

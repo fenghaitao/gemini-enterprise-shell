@@ -355,6 +355,23 @@ async fn answer_uses_only_folder_files_and_prints_references() {
         .failure()
         .stderr(predicate::str::contains("must not contain path:"));
     assert_eq!(server.received_requests().await.unwrap().len(), before);
+
+    command(&server)
+        .args([
+            "answer",
+            "--session-id",
+            "5",
+            "--sharepoint-folder",
+            FOLDER,
+            "--search-terms",
+            "alpha",
+            "--data-store-id",
+            "sp_file",
+            "q",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '--session-id'"));
 }
 
 #[tokio::test]
