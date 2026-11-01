@@ -5,8 +5,9 @@
 //! (2) Answer with only those results in `searchSpec.searchResultList`, so no other
 //! server-side search runs. Every returned URL is re-checked against the folder and
 //! anything outside it fails the call. Answers run in a server session so follow-ups
-//! can use the history, but the session does not store the scope: every turn searches
-//! again and sends only those files.
+//! can use the history. Because the service does not store folder scope in a session,
+//! every continuation first verifies its saved history against the requested folder,
+//! then searches that folder again and sends only those files.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -158,11 +159,11 @@ impl GeminiEnterpriseClient {
                 "search page size must be 1-{MAX_SEARCH_RESULTS}"
             )));
         }
-        if request.folder.is_some() && request.data_stores.is_empty() {
-            // Without explicit datastores the engine would fan the query out to all of its
-            // connectors before the local folder check could reject their results.
+        if request.folder.is_some() && request.data_stores.len() != 1 {
+            // Zero stores fans out to engine defaults; multiple explicit stores can fan the
+            // query out to unrelated connectors before the local folder check runs.
             return Err(Error::validation(
-                "a folder-scoped search needs at least one datastore (the SharePoint file datastore)",
+                "a folder-scoped search needs exactly one datastore (the SharePoint file datastore)",
             ));
         }
         let query = match &request.folder {
@@ -235,9 +236,9 @@ impl GeminiEnterpriseClient {
                 "question must be nonempty and at most 256 KiB UTF-8",
             ));
         }
-        if request.data_stores.is_empty() {
+        if request.data_stores.len() != 1 {
             return Err(Error::validation(
-                "a folder-scoped answer needs at least one datastore (the SharePoint file datastore)",
+                "a folder-scoped answer needs exactly one datastore (the SharePoint file datastore)",
             ));
         }
         let requested_session = request
@@ -245,6 +246,10 @@ impl GeminiEnterpriseClient {
             .as_deref()
             .map(|s| self.session_resource(s))
             .transpose()?;
+        if let Some(session) = &requested_session {
+            self.validate_folder_session_scope(session, &request.folder)
+                .await?;
+        }
         let mut search = SearchRequest::new(request.search_terms);
         search.folder = Some(request.folder.clone());
         search.data_stores = request.data_stores;
@@ -327,6 +332,50 @@ impl GeminiEnterpriseClient {
             ));
         }
         Ok(answer)
+    }
+
+    /// The service does not persist folder scope on a session. Before reusing one,
+    /// fail closed unless every prior turn is a folder Answer whose saved references
+    /// are verifiably inside the requested folder.
+    async fn validate_folder_session_scope(
+        &self,
+        session: &str,
+        folder: &SharePointFolder,
+    ) -> Result<()> {
+        let saved = self.get_session(session, true).await?;
+        let invalid = || {
+            Error::validation(concat!(
+                "cannot continue folder session: prior session history is not verifiably scoped ",
+                "to this folder; start a new folder session"
+            ))
+        };
+        for turn in saved.turns {
+            if turn.answer.is_none()
+                || turn.detailed_answer.is_none()
+                || turn.detailed_assist_answer.is_some()
+            {
+                return Err(invalid());
+            }
+            let Some(detail) = turn.detailed_answer.as_ref() else {
+                return Err(invalid());
+            };
+            let Some(references) = detail.get("references").and_then(Value::as_array) else {
+                return Err(invalid());
+            };
+            if references.is_empty() {
+                return Err(invalid());
+            }
+            for reference in references {
+                let uri = reference
+                    .pointer("/chunkInfo/documentMetadata/uri")
+                    .or_else(|| reference.pointer("/unstructuredDocumentInfo/uri"))
+                    .and_then(Value::as_str);
+                if !uri.is_some_and(|uri| folder.contains(uri)) {
+                    return Err(invalid());
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn post_serving_config(

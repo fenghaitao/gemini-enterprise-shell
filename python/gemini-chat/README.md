@@ -36,7 +36,7 @@ print(scoped["answer"], [r["uri"] for r in scoped["references"]], scoped["warnin
 follow_up = client.answer_in_folder(
     "Shorten that.", search_terms="sync handshake", sharepoint_folder=folder,
     data_store_ids=["your-sharepoint-file-datastore"], session_id=scoped["session"],
-)   # every turn searches the folder again
+)   # verifies saved history is in this folder, then searches the folder again
 ```
 
 Token providers: `GcloudTokenProvider()` (`gcloud auth print-access-token`) or

@@ -134,6 +134,34 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         type(self).requests.append(("GET", self.path, None))
+        if "/sessions/900" in self.path:
+            session = f"{ENGINE}/sessions/900"
+            self._send(
+                {
+                    "name": session,
+                    "turns": [
+                        {
+                            "query": {"text": "earlier folder question"},
+                            "answer": f"{session}/answers/1",
+                            "detailedAnswer": {
+                                "name": f"{session}/answers/1",
+                                "answerText": "Earlier folder answer.",
+                                "references": [
+                                    {
+                                        "chunkInfo": {
+                                            "documentMetadata": {
+                                                "uri": f"{FOLDER}/a.txt",
+                                                "title": "A-0001",
+                                            }
+                                        }
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            )
+            return
         self._send(
             {
                 "name": SESSION,
@@ -301,8 +329,21 @@ def test_folder_search_requires_a_datastore_and_urls_normalize(
     monkeypatch: pytest.MonkeyPatch, server: str
 ) -> None:
     client = _client(monkeypatch, server)
-    with pytest.raises(GeminiChatError, match="needs at least one datastore"):
+    with pytest.raises(GeminiChatError, match="needs exactly one datastore"):
         client.search("alpha", sharepoint_folder=FOLDER)
+    with pytest.raises(GeminiChatError, match="needs exactly one datastore"):
+        client.search(
+            "alpha",
+            sharepoint_folder=FOLDER,
+            data_store_ids=["sp", "crm"],
+        )
+    with pytest.raises(GeminiChatError, match="needs exactly one datastore"):
+        client.answer_in_folder(
+            "q",
+            search_terms="alpha",
+            sharepoint_folder=FOLDER,
+            data_store_ids=["sp", "crm"],
+        )
     assert _Handler.requests == []
     spaced = FOLDER.replace("%20", " ") + "/"
     assert normalize_sharepoint_folder(spaced) == FOLDER
@@ -330,4 +371,6 @@ def test_folder_answers_continue_a_session(monkeypatch: pytest.MonkeyPatch, serv
     searches = [r for r in posts if r[1].endswith(":search")]
     assert answer_sessions[0].endswith("/sessions/-")
     assert answer_sessions[1] == first["session"]
+    gets = [r for r in _Handler.requests if r[0] == "GET"]
+    assert any("/sessions/900?includeAnswerDetails=true" in r[1] for r in gets)
     assert len(searches) == 2  # every turn searches the folder again

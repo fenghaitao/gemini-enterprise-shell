@@ -47,9 +47,9 @@ impl SharePointFolder {
         let url = Url::parse(input).map_err(|_| {
             Error::validation("invalid SharePoint folder URL; copy it from the browser address bar")
         })?;
-        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        if !is_safe_sharepoint_url(&url) {
             return Err(Error::validation(
-                "SharePoint folder URL must be https and contain no credentials",
+                "SharePoint folder URL must be https and contain no credentials or custom port",
             ));
         }
         let host = url
@@ -107,6 +107,9 @@ impl SharePointFolder {
         let Ok(url) = Url::parse(uri.trim()) else {
             return false;
         };
+        if !is_safe_sharepoint_url(&url) {
+            return false;
+        }
         if !url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case(&self.host))
@@ -130,6 +133,9 @@ impl SharePointFolder {
 /// without query or fragment (`?web=1`). `None` if it is not a usable URL.
 pub(crate) fn normalized_uri(uri: &str) -> Option<String> {
     let url = Url::parse(uri.trim()).ok()?;
+    if !is_safe_sharepoint_url(&url) {
+        return None;
+    }
     let host = url.host_str()?.to_ascii_lowercase();
     let path = percent_decode_str(url.path()).decode_utf8().ok()?;
     if has_dot_segment(&path) {
@@ -139,6 +145,13 @@ pub(crate) fn normalized_uri(uri: &str) -> Option<String> {
         "{host}{}",
         path.trim_end_matches('/').to_lowercase()
     ))
+}
+
+fn is_safe_sharepoint_url(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
 }
 
 fn has_dot_segment(path: &str) -> bool {
@@ -212,6 +225,7 @@ mod tests {
         for input in [
             "http://example.sharepoint.com/sites/eng",
             "https://user:pw@example.sharepoint.com/sites/eng",
+            "https://example.sharepoint.com:8443/sites/eng",
             "https://example.sharepoint.com/:f:/s/eng/EabcDEF",
             "https://example.sharepoint.com/",
             "not a url",
@@ -248,6 +262,9 @@ mod tests {
             "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs-old/a.txt",
             "https://example.sharepoint.com/sites/eng/Shared%20Documents/Team/a.txt",
             "https://other.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/a.txt",
+            "http://example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/a.txt",
+            "https://user@example.sharepoint.com/sites/eng/Shared%20Documents/Team/Specs/a.txt",
+            "https://example.sharepoint.com:8443/sites/eng/Shared%20Documents/Team/Specs/a.txt",
             "not a url",
         ] {
             assert!(!folder.contains(outside), "{outside}");

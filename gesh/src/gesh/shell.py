@@ -42,6 +42,7 @@ HELP = """\
   /new, /history          In folder mode: start a new / read back the folder session
   /terms KEYWORDS         Keywords that find the files (every word must match)
   /search [TERMS]         List matching files (uses /folder; no generation)
+                          Folder mode requires exactly one datastore.
 
 [bold]Notebooks (NotebookLM Enterprise)[/bold]
   /nb list [N]            Recently viewed notebooks (numbered for later commands)
@@ -302,8 +303,11 @@ class Shell:
                 "set /terms KEYWORDS first: in a folder, files are found by keywords "
                 "(every word must match), not by the question"
             )
-        if not self.config.data_stores:
-            raise ShellError("a folder-scoped answer needs a datastore: /ds add ID")
+        if len(self.config.data_stores) != 1:
+            raise ShellError(
+                "a folder-scoped answer needs exactly one datastore: "
+                "use /ds clear, then /ds add ID"
+            )
         chat = self.chat
         data_stores = list(self.config.data_stores)
         session_at_dispatch = self.folder_session
@@ -480,7 +484,8 @@ class Shell:
         render.render_session(self.console, session)
         self.console.print(
             Text(
-                "Continuing this folder session; each question still searches the folder.",
+                "Selected this folder session. Its saved history is verified against "
+                "the current folder before the next question.",
                 style="dim",
             )
         )
@@ -574,8 +579,11 @@ class Shell:
             raise ShellError("usage: /search TERMS (or set /terms first)")
         chat = self.chat
         folder = self.config.sharepoint_folder
-        if folder and not self.config.data_stores:
-            raise ShellError("a folder-scoped search needs a datastore: /ds add ID")
+        if folder and len(self.config.data_stores) != 1:
+            raise ShellError(
+                "a folder-scoped search needs exactly one datastore: "
+                "use /ds clear, then /ds add ID"
+            )
         data_stores = list(self.config.data_stores) or None
         results = self._run(
             lambda: chat.search(terms, sharepoint_folder=folder, data_store_ids=data_stores),

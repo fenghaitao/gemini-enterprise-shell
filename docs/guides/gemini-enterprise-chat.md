@@ -144,7 +144,9 @@ How it works:
    permissions. Spell correction is suggestion-only, because automatic correction
    rewrites the folder URL.
 2. **Answer** receives only those files (`searchSpec.searchResultList`), so no other
-   server-side search runs; its citations can only point at supplied files.
+   server-side search runs; its citations can only point at supplied files. Folder-scoped
+   Search/Answer require exactly **one** datastore, preventing the query from being fanned
+   out to unrelated connectors before local URL checks run.
 3. Every search result and every answer reference is re-checked locally against the
    folder (host, then path, case-insensitive, ignoring `?web=1`). Anything outside
    fails the call instead of being dropped silently.
@@ -170,13 +172,16 @@ Limits:
   warning says when the limit was reached.
 - Search returns full text for only about the top 5 files; the rest are sent as short
   snippets, and a warning reports how many.
-- Sessions: the first `answer` creates a server session (`Session:` in the output);
-  `--session-id` continues it, and the model sees the earlier turns. The folder scope is
-  **not stored in the session**: every turn runs its own folder-scoped search and sends
-  only those files, so give each follow-up its own `--search-terms` (shorthand questions
-  like "which die?" make poor keywords). Readback works with `gemini-chat session`;
-  these turns carry `detailedAnswer` and no `model_id`. Don't continue a chat (`ask`)
-  session with `answer` or the other way round; mixing them is untested.
+- Sessions: the first `answer` creates a server session (`Session:` in the output).
+  The service does **not** store folder scope on that session. Therefore `--session-id`
+  first reads the saved session with answer details and rejects it unless every prior turn
+  is verifiably a folder Answer whose references are inside the requested folder. This
+  prevents a session from another folder (or a normal `ask` session) from carrying
+  out-of-scope history into the answer. Continuing a folder session consequently requires
+  session-read permission. After validation, every turn runs its own folder-scoped search
+  and sends only those files; give each follow-up its own `--search-terms` (shorthand
+  questions like "which die?" make poor keywords). Readback works with
+  `gemini-chat session`; these turns carry `detailedAnswer` and no `model_id`.
 - `answer` has no `--model` option. A question the Answer API declines (for example
   small talk) is reported as skipped; if no file matches, the Answer API is not called
   at all.

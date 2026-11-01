@@ -80,8 +80,10 @@ class GeminiEnterpriseClient:
     ) -> dict[str, Any]:
         """Answer only from files in one SharePoint folder: {answer, session,
         answer_resource, folder, search_query, citations, references, sources, warnings}.
-        Pass the returned session as session_id to ask a follow-up; each turn searches
-        the folder again with that turn's search_terms."""
+        data_store_ids must contain exactly one SharePoint datastore. Pass the returned
+        session as session_id to ask a follow-up; its saved history is first verified to
+        be inside the requested folder, then each turn searches the folder again with
+        that turn's search_terms."""
 
 class GeminiAssistResponse:
     @property
