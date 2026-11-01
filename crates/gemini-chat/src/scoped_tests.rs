@@ -60,6 +60,29 @@ fn answer_response(uri: &str) -> Value {
     }, "answerQueryToken": "tok"})
 }
 
+fn folder_session_response(uri: &str) -> Value {
+    json!({"name": SESSION, "turns": [{
+        "query": {"text": "earlier folder question"},
+        "answer": format!("{SESSION}/answers/1"),
+        "detailedAnswer": {
+            "name": format!("{SESSION}/answers/1"),
+            "state": "SUCCEEDED",
+            "answerText": "Earlier folder answer.",
+            "references": [{"chunkInfo": {"documentMetadata": {
+                "uri": uri, "title": "earlier"
+            }}}]
+        }
+    }]})
+}
+
+async fn mount_folder_session(server: &MockServer, uri: &str) {
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/{SESSION}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(folder_session_response(uri)))
+        .mount(server)
+        .await;
+}
+
 async fn mount_search(server: &MockServer, response: Value) {
     Mock::given(method("POST"))
         .and(path(format!(
@@ -312,7 +335,7 @@ async fn folder_search_requires_an_explicit_datastore() {
     request.folder = Some(folder());
     let error = client(&server).await.search(request).await.unwrap_err();
     assert!(
-        error.to_string().contains("needs at least one datastore"),
+        error.to_string().contains("needs exactly one datastore"),
         "{error}"
     );
     assert!(server.received_requests().await.unwrap().is_empty());
@@ -403,6 +426,7 @@ fn citation_offsets_are_parsed_strictly() {
 async fn folder_answers_create_and_continue_a_session_rescoping_every_turn() {
     let server = MockServer::start().await;
     mount_search(&server, search_response()).await;
+    mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
     Mock::given(method("POST"))
         .and(path(format!(
             "/v1/{ENGINE}/servingConfigs/default_search:answer"
@@ -455,6 +479,7 @@ async fn folder_answer_session_and_answer_names_are_checked() {
     ] {
         let server = MockServer::start().await;
         mount_search(&server, search_response()).await;
+        mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
         let mut response = answer_response(&format!("{FOLDER}/sub/A-0001.txt"));
         response["session"]["name"] = json!(session);
         response["answer"]["name"] = json!(answer_name);
@@ -589,6 +614,7 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
     ] {
         let server = MockServer::start().await;
         mount_search(&server, search_response()).await;
+        mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
         Mock::given(method("POST"))
             .and(path(format!(
                 "/v1/{ENGINE}/servingConfigs/default_search:answer"
@@ -610,6 +636,7 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
     // A matching session is attached to the skip as before.
     let server = MockServer::start().await;
     mount_search(&server, search_response()).await;
+    mount_folder_session(&server, &format!("{FOLDER}/sub/A-0001.txt")).await;
     Mock::given(method("POST"))
         .and(path(format!("/v1/{ENGINE}/servingConfigs/default_search:answer")))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"session": {"name": SESSION},
@@ -623,6 +650,70 @@ async fn skipped_and_failed_answers_never_carry_an_unvalidated_session() {
         Err(Error::Skipped { session, .. }) => assert_eq!(session.as_deref(), Some(SESSION)),
         other => panic!("expected Skipped, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn continuing_folder_session_rejects_cross_folder_or_chat_history_before_search() {
+    let other = "https://example.sharepoint.com/sites/eng/Shared%20Documents/Other/a.txt";
+    for session_response in [
+        folder_session_response(other),
+        json!({"name": SESSION, "turns": [{
+            "query": {"text": "ordinary chat"},
+            "queryConfig": {"google.discoveryengine.googleapis.com.Assistant.model_id": "m1"},
+            "detailedAssistAnswer": {"replies": []}
+        }]}),
+    ] {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/v1/{SESSION}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(session_response))
+            .mount(&server)
+            .await;
+        let mut request = FolderAnswerRequest::new("q?", "sync", folder());
+        request.data_stores = vec!["sp_file".into()];
+        request.session = Some("77".into());
+        let error = client(&server)
+            .await
+            .answer_in_folder(request)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("not verifiably scoped"), "{error}");
+        assert!(
+            server
+                .received_requests()
+                .await
+                .unwrap()
+                .iter()
+                .all(|request| request.method.as_str() == "GET")
+        );
+    }
+}
+
+#[tokio::test]
+async fn folder_scope_rejects_multiple_datastores_before_network() {
+    let server = MockServer::start().await;
+    let c = client(&server).await;
+
+    let mut search = SearchRequest::new("sync");
+    search.folder = Some(folder());
+    search.data_stores = vec!["sp_file".into(), "crm".into()];
+    assert!(c
+        .search(search)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("exactly one datastore"));
+
+    let mut answer = FolderAnswerRequest::new("q?", "sync", folder());
+    answer.data_stores = vec!["sp_file".into(), "crm".into()];
+    assert!(c
+        .answer_in_folder(answer)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("exactly one datastore"));
+
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
 
 #[tokio::test]

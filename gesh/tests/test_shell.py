@@ -473,7 +473,7 @@ def test_folder_mode_needs_a_datastore_and_search_uses_folder_and_terms() -> Non
     shell.handle("/terms alpha")
     shell.handle("/ds clear")
     shell.handle("q?")
-    assert "needs a datastore" in out.getvalue()
+    assert "needs exactly one datastore" in out.getvalue()
     shell.handle("/ds add ds1")
     shell.handle("/search")
     call = chat.calls[-1]
@@ -481,6 +481,13 @@ def test_folder_mode_needs_a_datastore_and_search_uses_folder_and_terms() -> Non
     assert "1 file(s)" in out.getvalue()
     shell.handle("/search beta gamma")
     assert chat.calls[-1]["search"] == "beta gamma"
+    shell.handle("/ds add ds2")
+    before = len(chat.calls)
+    shell.handle("/search gamma")
+    assert shell.last_command_failed and "exactly one datastore" in out.getvalue()
+    assert len(chat.calls) == before
+    shell.handle("q with too many stores")
+    assert shell.last_command_failed and len(chat.calls) == before
 
 
 def test_folder_flags_and_env_are_read(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -516,7 +523,7 @@ def test_folder_urls_are_validated_up_front_and_search_needs_a_datastore() -> No
         "https://example.sharepoint.com/sites/eng/Shared%20Documents/Specs"
     )
     shell.handle("/search alpha")
-    assert "needs a datastore" in out.getvalue() and chat.calls == []
+    assert "needs exactly one datastore" in out.getvalue() and chat.calls == []
 
 
 def test_folder_session_resets_on_folder_change_and_history_reads_it() -> None:

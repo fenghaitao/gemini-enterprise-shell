@@ -364,7 +364,21 @@ async fn folder_search_without_a_datastore_is_rejected_locally() {
         .args(["search", "--sharepoint-folder", FOLDER, "alpha"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("needs at least one datastore"));
+        .stderr(predicate::str::contains("needs exactly one datastore"));
+    command(&server)
+        .args([
+            "search",
+            "--sharepoint-folder",
+            FOLDER,
+            "--data-store-id",
+            "sp_file",
+            "--data-store-id",
+            "crm",
+            "alpha",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exactly one datastore"));
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 

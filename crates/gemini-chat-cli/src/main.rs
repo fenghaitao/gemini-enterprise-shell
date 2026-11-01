@@ -100,7 +100,7 @@ struct SearchArgs {
     /// Restrict to this folder (recursive); copy the URL from the browser.
     #[arg(long, value_name = "URL")]
     sharepoint_folder: Option<String>,
-    /// Datastore to search (repeatable), e.g. the SharePoint file datastore.
+    /// Datastore to search. Repeatable without a folder; folder scope requires exactly one.
     #[arg(long = "data-store-id", value_name = "ID")]
     data_stores: Vec<String>,
     /// Maximum results, 1-100.
@@ -119,9 +119,9 @@ struct FolderAnswerArgs {
     /// Keywords that find the relevant files (every word must match), separate from the question.
     #[arg(long, value_name = "KEYWORDS")]
     search_terms: String,
-    /// Datastore to search (repeatable; at least one), e.g. the SharePoint file datastore.
-    #[arg(long = "data-store-id", value_name = "ID", required = true)]
-    data_stores: Vec<String>,
+    /// The one SharePoint file datastore to search.
+    #[arg(long = "data-store-id", value_name = "ID")]
+    data_store: String,
     /// Files to retrieve, 1-100. Only about the top 5 arrive with full text.
     #[arg(long, default_value_t = 10)]
     page_size: u32,
@@ -219,7 +219,7 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Answer(args) => {
             let folder = SharePointFolder::parse(&args.sharepoint_folder)?;
             let mut request = FolderAnswerRequest::new(args.question, args.search_terms, folder);
-            request.data_stores = args.data_stores;
+            request.data_stores = vec![args.data_store];
             request.page_size = args.page_size;
             request.session = args.session_id;
             let answer = client.answer_in_folder(request).await?;
