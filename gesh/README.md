@@ -115,9 +115,15 @@ gesh[folder:Specs]> /folder off                   # back to normal chat (its ses
 | `/terms KEYWORDS`, `/terms off` | Keywords that find files in the folder |
 | `/search [TERMS]` | Matching files (in the folder if set), full text or snippet |
 
+In folder mode, `/session` shows the folder session and `/session ID` switches to an
+earlier folder session; before the next question its saved history is verified to be
+inside the current folder, so a chat session or another folder's session is refused.
+
 Also `--sharepoint-folder` / `--search-terms` (or `GESH_SHAREPOINT_FOLDER` /
 `GESH_SEARCH_TERMS`). At most 100 files per search; only about 5 arrive with full text,
-which the answer's warnings report. A datastore (`/ds add`) is required.
+which the answer's warnings report. Folder mode needs **exactly one** datastore, the
+SharePoint file datastore (`/ds clear`, then `/ds add ID`); see the guide's "End to
+end" steps for finding its ID.
 
 ### Notebook commands
 
