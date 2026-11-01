@@ -1,13 +1,18 @@
-# nblm-rs Documentation
+# Gemini Enterprise Shell Documentation
 
-Complete documentation for the NotebookLM Enterprise API client (CLI & Python SDK).
+Terminal-first Gemini Enterprise shell: official Gemini Enterprise chat/search APIs,
+SharePoint folder-scoped answers, and NotebookLM Enterprise support, with the
+nblm-rs stack retained as the NotebookLM foundation.
 
 !!! important "Unofficial Project"
-    This project is not affiliated with, sponsored, or endorsed by Google. nblm-rs is an independent, unofficial tool. It is provided "as is" without any warranty.
+    This project is not affiliated with, sponsored, or endorsed by Google. The
+    NotebookLM side (`nblm`) is an independent, unofficial client, while the Gemini
+    Enterprise side (`gemini-chat`) uses Google's official Discovery Engine v1 APIs.
+    It is provided "as is" without any warranty.
 
 ## Getting Started
 
-**New to nblm-rs?** Start here:
+**New here?** Start here:
 
 - [Installation](getting-started/installation.md) - Install CLI or Python SDK
 - [Authentication](getting-started/authentication.md) - Set up authentication with gcloud
@@ -50,6 +55,14 @@ Complete documentation for the NotebookLM Enterprise API client (CLI & Python SD
 | Feature        | CLI | Python | Status   | Notes                     |
 | -------------- | --- | ------ | -------- | ------------------------- |
 | Share notebook | ✅  | ❌     | Untested | Requires additional users |
+
+## Gemini Enterprise
+
+- [Assistant Guide](guides/gemini-enterprise-chat.md) - Official Discovery Engine v1
+  assistant usage, authentication, sessions, grounding, and SharePoint folder isolation
+- [gesh Shell](https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/gesh/README.md) -
+  Interactive terminal shell: Gemini Enterprise chat, folder-scoped Q&A, and NotebookLM
+  commands in one shell
 
 ## CLI Reference
 
@@ -95,7 +108,7 @@ Additional guides and tutorials:
 
 ## Contributing
 
-- [Contributing Guide](https://github.com/K-dash/nblm-rs/blob/main/CONTRIBUTING.md) - Development setup and guidelines
+- [Contributing Guide](https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/CONTRIBUTING.md) - Development setup and guidelines
 
 ---
 

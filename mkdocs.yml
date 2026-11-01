@@ -1,8 +1,8 @@
-site_name: NBLM Docs
-site_description: Official documentation for the NotebookLM Enterprise client
-site_url: https://k-dash.github.io/nblm-rs/
-repo_url: https://github.com/K-dash/nblm-rs
-repo_name: K-dash/nblm-rs
+site_name: Gemini Enterprise Shell Docs
+site_description: Terminal-first Gemini Enterprise shell with official chat/search APIs, SharePoint folder-scoped answers, and NotebookLM Enterprise support
+site_url: https://fenghaitao.github.io/gemini-enterprise-shell/
+repo_url: https://github.com/fenghaitao/gemini-enterprise-shell
+repo_name: fenghaitao/gemini-enterprise-shell
 docs_dir: docs
 theme:
   name: material
@@ -56,7 +56,6 @@ nav:
       - Notebooks: cli/notebooks.md
       - Sources: cli/sources.md
       - Audio: cli/audio.md
-      - Gemini Enterprise: guides/gemini-enterprise-chat.md
       - Share: cli/share.md
       - Doctor: cli/doctor.md
   - Python SDK:
@@ -69,6 +68,9 @@ nav:
       - Error Handling: python/error-handling.md
   - Rust:
       - Getting Started: rust/getting-started.md
+  - Gemini Enterprise:
+      - Assistant Guide: guides/gemini-enterprise-chat.md
+      - gesh Shell: https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/gesh/README.md
   - Guides:
       - Troubleshooting: guides/troubleshooting.md
   - API:
