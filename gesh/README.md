@@ -145,7 +145,10 @@ settings. One start attempt per plan is allowed, including after uncertainty.
 Ctrl-C stops waiting, not server work; wait for the late result, use read-only
 `/research read ID`, or inspect the UI. A successful read clears any pending
 plan/start authorization and its pinned sources, even for the same session.
-Create and review a new plan before starting again.
+Late plans from before that read remain visible/savable but cannot restore start
+authorization. Create and review a new plan before starting again. If a late plan
+first appears while processing `/research start`, review it and issue a fresh
+`/research start` command; that same input cannot both reveal and start the plan.
 Research sessions/results do not replace chat or folder sessions. Active folder
 mode is rejected for generation because research has **no folder isolation**.
 
