@@ -1,7 +1,8 @@
 //! Client for the official Gemini Enterprise assistant API.
 //!
 //! Talks to Discovery Engine v1 `streamAssist` (generation) and `sessions.get`
-//! (readback) with an OAuth access token, plus SharePoint folder-scoped Search and
+//! (readback) with an OAuth access token, including explicit Deep Research
+//! planning/start via the built-in agent, plus SharePoint folder-scoped Search and
 //! Answer (see [`GeminiEnterpriseClient::answer_in_folder`]). Independent of NotebookLM.
 
 mod auth;

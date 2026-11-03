@@ -35,6 +35,8 @@ pub struct GeminiEnterpriseConfig {
     pub collection_id: String,
     pub assistant_id: String,
     pub timeout: Duration,
+    /// Per-request Deep Research deadline (plan and start); independent of chat.
+    pub research_timeout: Duration,
 }
 
 impl GeminiEnterpriseConfig {
@@ -50,6 +52,7 @@ impl GeminiEnterpriseConfig {
             collection_id: "default_collection".into(),
             assistant_id: "default_assistant".into(),
             timeout: Duration::from_secs(360),
+            research_timeout: Duration::from_secs(1800),
         }
     }
 
@@ -77,7 +80,7 @@ impl GeminiEnterpriseConfig {
                 SUPPORTED_LOCATIONS.join(", ")
             )));
         }
-        if self.timeout.is_zero() {
+        if self.timeout.is_zero() || self.research_timeout.is_zero() {
             return Err(Error::validation("enterprise timeout must be positive"));
         }
         Ok(())
@@ -150,6 +153,18 @@ impl GeminiEnterpriseClient {
     /// On any post-dispatch failure the server may have recorded the turn.
     pub async fn ask(&self, request: AssistRequest) -> Result<AssistResponse> {
         let (body, requested_session) = self.request_body(&request)?;
+        let bytes = self
+            .send_assist(&body, requested_session.clone(), self.config.timeout)
+            .await?;
+        self.parse_answer(&bytes, request.model_id, requested_session)
+    }
+
+    async fn send_assist(
+        &self,
+        body: &Value,
+        requested_session: Option<String>,
+        timeout: Duration,
+    ) -> Result<Vec<u8>> {
         // Token acquisition is pre-dispatch and may fail normally. Never log the token/body.
         let token = self.provider.access_token().await?;
         let resource = format!(
@@ -163,7 +178,8 @@ impl GeminiEnterpriseClient {
             .post(url)
             .bearer_auth(token)
             .header("x-goog-user-project", &self.config.project_number)
-            .json(&body)
+            .json(body)
+            .timeout(timeout)
             .send()
             .await;
         let response = result.map_err(|_| {
@@ -182,7 +198,7 @@ impl GeminiEnterpriseClient {
                 requested_session,
             ));
         }
-        self.parse_answer(&bytes, request.model_id, requested_session)
+        Ok(bytes)
     }
 
     /// Read a saved server session. Does not generate or continue a conversation.
@@ -697,6 +713,7 @@ struct Answer {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Reply {
+    agent: Option<String>,
     #[serde(default)]
     grounded_content: GroundedContent,
 }
@@ -705,10 +722,18 @@ struct Reply {
 struct GroundedContent {
     content: Option<Content>,
     text_grounding_metadata: Option<TextGroundingMetadata>,
+    content_metadata: Option<ContentMetadata>,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ContentMetadata {
+    content_kind: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Content {
     text: Option<String>,
+    file: Option<ResearchFile>,
     #[serde(default)]
     thought: bool,
 }
@@ -744,6 +769,9 @@ impl<'de> Deserialize<'de> for Frames {
         deserializer.deserialize_seq(Visitor)
     }
 }
+
+#[path = "research.rs"]
+mod research;
 
 #[path = "scoped.rs"]
 mod scoped;

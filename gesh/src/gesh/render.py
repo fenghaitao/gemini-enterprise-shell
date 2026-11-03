@@ -224,3 +224,38 @@ def render_search(console: Console, results: dict[str, Any]) -> None:
     console.print(table)
     for warning in results.get("warnings") or []:
         console.print(Text(f"! {warning}", style="yellow"))
+
+
+def render_research(console: Console, response: dict[str, Any]) -> None:
+    """Never merge intermediate blocks with a report or label a candidate as verified."""
+    phase = response["requested_phase"]
+    report_indices = response.get("report_indices") or []
+    candidate = response.get("final_text_candidate_index")
+    console.print(
+        Text(f"Deep Research {phase} · session {short_id(response.get('session'))}", style="bold")
+    )
+    for i, block in enumerate(response.get("contents") or []):
+        if (phase == "plan" or i in report_indices or i == candidate) and block.get("text"):
+            console.print(
+                Text(block.get("kind") or "Unclassified text (stage unverified)", style="dim")
+            )
+            console.print(Markdown(block["text"]))
+            refs = citations(block.get("grounding") or [])
+            if refs:
+                console.print(Text(f"Native sources in this block: {len(refs)}", style="dim"))
+        if block.get("file"):
+            file = block["file"]
+            console.print(
+                Text(
+                    f"File metadata: {file['fileId']} ({file['mimeType']}); "
+                    "no download implemented",
+                    style="dim",
+                )
+            )
+    for warning in response.get("warnings") or []:
+        console.print(Text(f"! {warning}", style="yellow"))
+    console.print(
+        Text("/research save FILE preserves all blocks and native grounding as JSON.", style="dim")
+    )
+    if phase == "plan":
+        console.print(Text("Review the plan, then explicitly /research start.", style="cyan"))

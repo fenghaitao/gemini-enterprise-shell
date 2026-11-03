@@ -239,6 +239,12 @@ gemini-chat --project-number YOUR_PROJECT_NUMBER --location us --json \
 Supports explicit models, server-session continuation/readback, and native
 structured grounding. No generation retries or model fallback. Answers without
 native references are flagged; citations and quotes still require review.
+Built-in **Deep Research** is available through `gemini-chat research plan` then
+`research start --session-id …`, Rust/Python SDKs, and gesh's `/research` commands.
+It uses the official OAuth API, a separate 30-minute research timeout, and no
+automatic generation retries. See the [Deep Research guide](docs/guides/deep-research.md)
+for source selection, explicit start, and the missing public stage-label limitation.
+
 See the [Gemini Enterprise guide](docs/guides/gemini-enterprise-chat.md) for CLI,
 Rust/Python examples, authentication, and tool boundaries.
 

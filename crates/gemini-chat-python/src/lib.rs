@@ -7,8 +7,8 @@ use std::{
 };
 
 use gemini_chat::{
-    AssistRequest, AssistResponse, FolderAnswerRequest, GeminiEnterpriseConfig, SearchRequest,
-    SharePointFolder,
+    AssistRequest, AssistResponse, FolderAnswerRequest, GeminiEnterpriseConfig,
+    ResearchPlanRequest, ResearchStartRequest, SearchRequest, SharePointFolder,
 };
 use pyo3::{
     create_exception,
@@ -141,7 +141,7 @@ pub struct GeminiEnterpriseClient {
 #[pymethods]
 impl GeminiEnterpriseClient {
     #[new]
-    #[pyo3(signature = (token_provider, project_number, engine_id, location="global".to_string(), *, collection_id="default_collection".to_string(), assistant_id="default_assistant".to_string(), timeout_secs=360.0, base_url=None))]
+    #[pyo3(signature = (token_provider, project_number, engine_id, location="global".to_string(), *, collection_id="default_collection".to_string(), assistant_id="default_assistant".to_string(), timeout_secs=360.0, base_url=None, research_timeout_secs=1800.0))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         token_provider: &Bound<'_, PyAny>,
@@ -152,6 +152,7 @@ impl GeminiEnterpriseClient {
         assistant_id: String,
         timeout_secs: f64,
         base_url: Option<String>,
+        research_timeout_secs: f64,
     ) -> PyResult<Self> {
         let timeout = Duration::try_from_secs_f64(timeout_secs)
             .map_err(|_| PyValueError::new_err("timeout_secs must be positive and finite"))?;
@@ -163,6 +164,12 @@ impl GeminiEnterpriseClient {
         config.collection_id = collection_id;
         config.assistant_id = assistant_id;
         config.timeout = timeout;
+        config.research_timeout = Duration::try_from_secs_f64(research_timeout_secs)
+            .ok()
+            .filter(|d| !d.is_zero())
+            .ok_or_else(|| {
+                PyValueError::new_err("research_timeout_secs must be positive and finite")
+            })?;
         let mut inner =
             gemini_chat::GeminiEnterpriseClient::new(provider, config).map_err(map_error)?;
         if let Some(base) = base_url {
@@ -193,6 +200,51 @@ impl GeminiEnterpriseClient {
         let inner = Arc::clone(&self.inner);
         let response = block_on(py, async move { inner.ask(request).await })?;
         Ok(GeminiAssistResponse { inner: response })
+    }
+
+    /// Create a Deep Research plan in a new session. Does not automatically start
+    /// research. The public API may omit stage labels; inspect contents/warnings.
+    #[pyo3(signature = (topic, *, data_store_ids=None, web_grounding=false))]
+    fn plan_research(
+        &self,
+        py: Python<'_>,
+        topic: String,
+        data_store_ids: Option<Vec<String>>,
+        web_grounding: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let mut request = ResearchPlanRequest::new(topic);
+        request.data_stores = data_store_ids.unwrap_or_default();
+        request.web_grounding = web_grounding;
+        let inner = Arc::clone(&self.inner);
+        let response = block_on(py, async move { inner.plan_research(request).await })?;
+        to_python(py, &response)
+    }
+
+    /// Start research ONCE in the plan's session; keep the same source settings.
+    /// May take 15+ minutes. Never retries. After uncertainty, read the session/UI.
+    /// Datastore selection is not folder isolation. No model override is sent.
+    #[pyo3(signature = (session_id, *, data_store_ids=None, web_grounding=false))]
+    fn start_research(
+        &self,
+        py: Python<'_>,
+        session_id: String,
+        data_store_ids: Option<Vec<String>>,
+        web_grounding: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let mut request = ResearchStartRequest::new(session_id);
+        request.data_stores = data_store_ids.unwrap_or_default();
+        request.web_grounding = web_grounding;
+        let inner = Arc::clone(&self.inner);
+        let response = block_on(py, async move { inner.start_research(request).await })?;
+        to_python(py, &response)
+    }
+
+    /// Read/recover the latest saved assistant answer without starting research.
+    /// Public stage labels may be absent; inspect warnings and the research UI.
+    fn get_research(&self, py: Python<'_>, session_id: String) -> PyResult<Py<PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        let response = block_on(py, async move { inner.get_research(&session_id).await })?;
+        to_python(py, &response)
     }
 
     /// Read persisted queries/model configuration. Does not generate a turn.

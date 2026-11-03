@@ -106,6 +106,29 @@ class _Handler(BaseHTTPRequestHandler):
                 ]
             )
             return
+        if "agentsSpec" in body:
+            self._send(
+                [
+                    {
+                        "sessionInfo": {"session": SESSION},
+                        "answer": {
+                            "name": f"{SESSION}/assistAnswers/789",
+                            "state": "SUCCEEDED",
+                            "replies": [
+                                {"groundedContent": {"content": {"text": "Research text"}}},
+                                {
+                                    "groundedContent": {
+                                        "content": {
+                                            "file": {"fileId": "1234", "mimeType": "audio/mp3"}
+                                        }
+                                    }
+                                },
+                            ],
+                        },
+                    }
+                ]
+            )
+            return
         grounding = (
             {
                 "references": [
@@ -168,6 +191,13 @@ class _Handler(BaseHTTPRequestHandler):
                 "turns": [
                     {
                         "query": {"text": "q"},
+                        "detailedAssistAnswer": {
+                            "state": "SUCCEEDED",
+                            "name": f"{SESSION}/assistAnswers/789",
+                            "replies": [
+                                {"groundedContent": {"content": {"text": "Saved research text"}}}
+                            ],
+                        },
                         "queryConfig": {
                             "google.discoveryengine.googleapis.com.Assistant.model_id": "gemini-4-argon"
                         },
@@ -390,3 +420,54 @@ def test_folder_session_cannot_be_imported_into_a_fresh_client(
             session_id="900",
         )
     assert _Handler.requests == []
+
+
+def test_research_plan_start_separate_and_native_dict(
+    monkeypatch: pytest.MonkeyPatch, server: str
+) -> None:
+    client = _client(monkeypatch, server)
+    plan = client.plan_research("Plan only", data_store_ids=["sp_file"])
+    assert plan["requested_phase"] == "plan"
+    assert len(_Handler.requests) == 1
+    assert plan["report_indices"] == []
+    assert plan["final_text_candidate_index"] == 0
+    assert plan["contents"][1]["file"]["mimeType"] == "audio/mp3"
+    result = client.start_research(plan["session"], data_store_ids=["sp_file"])
+    assert result["requested_phase"] == "start"
+    assert result["warnings"]
+    assert len(_Handler.requests) == 2
+    for _, _, body in _Handler.requests:
+        assert body is not None
+        assert body["agentsSpec"] == {"agentSpecs": [{"agentId": "deep_research"}]}
+        assert "generationSpec" not in body
+    assert _Handler.requests[1][2] is not None
+    assert _Handler.requests[1][2]["session"] == SESSION
+    assert _Handler.requests[1][2]["query"] == {"text": "Start Research"}
+
+
+def test_research_failure_is_not_retried(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    client = _client(monkeypatch, server)
+    _Handler.status = 503
+    with pytest.raises(GeminiChatError) as err:
+        client.start_research("456")
+    assert err.value.do_not_retry
+    assert err.value.session == SESSION
+    assert len(_Handler.requests) == 1
+
+
+@pytest.mark.parametrize("timeout", [0.0, -1.0, float("nan"), float("inf")])
+def test_research_timeout_must_be_positive_finite(timeout: float) -> None:
+    with pytest.raises(ValueError, match="research_timeout_secs"):
+        GeminiEnterpriseClient(
+            EnvTokenProvider(), "123", "search", "us", research_timeout_secs=timeout
+        )
+
+
+def test_research_recovery_is_read_only(monkeypatch: pytest.MonkeyPatch, server: str) -> None:
+    result = _client(monkeypatch, server).get_research("456")
+    assert result["requested_phase"] == "read"
+    assert result["requested_agent"] is None
+    assert result["contents"][0]["text"] == "Saved research text"
+    assert len(_Handler.requests) == 1
+    assert _Handler.requests[0][0] == "GET"
+    assert "includeAnswerDetails=true" in _Handler.requests[0][1]

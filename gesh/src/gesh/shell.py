@@ -1,4 +1,4 @@
-"""Command dispatcher and chat/notebook state for the gesh REPL.
+"""Command dispatcher and chat/research/notebook state for the gesh REPL.
 
 Clients are injected (or built lazily by factories) so the shell can be tested with fakes.
 Generation is never retried: a failed or abandoned ask may still be recorded server-side.
@@ -7,6 +7,8 @@ Generation is never retried: a failed or abandoned ask may still be recorded ser
 from __future__ import annotations
 
 import contextlib
+import json
+import os
 import shlex
 import threading
 import time
@@ -45,6 +47,14 @@ HELP = """\
   /search [TERMS]         List matching files (uses /folder; no generation)
                           Folder mode requires exactly one datastore.
 
+[bold]Deep Research (separate session; no folder isolation)[/bold]
+  /research plan TOPIC    Create a plan; does not automatically start research
+  /research start         Start the current plan ONCE, with its original sources
+  /research show          Show the last research result
+  /research history       Read its saved server session (no generation)
+  /research read ID       Recover a saved research result without generation
+  /research save FILE     Save all research blocks/grounding as private JSON (new file)
+
 [bold]Notebooks (NotebookLM Enterprise)[/bold]
   /nb list [N]            Recently viewed notebooks (numbered for later commands)
   /nb show NB             Sources of a notebook (NB = number from /nb list, or notebook ID)
@@ -76,6 +86,8 @@ class _Pending:
     folder_scoped: bool = False
     folder: str | None = None
     search_terms: str | None = None
+    research_phase: str | None = None
+    research_sources: tuple[list[str], bool] | None = None
 
 
 @dataclass
@@ -114,6 +126,10 @@ class Shell:
         self._normalize_folder = normalize_folder
         self.session: str | None = None
         self.last: Any = None
+        self.last_research: dict[str, Any] | None = None
+        self.research_plan: dict[str, Any] | None = None
+        self._research_sources: tuple[list[str], bool] = ([], False)
+        self._research_started = False
         # Last folder-scoped answer (a dict); /refs shows whichever answer came last.
         self.last_folder_answer: dict[str, Any] | None = None
         # Folder answers use their own server session, separate from the chat session.
@@ -228,6 +244,7 @@ class Shell:
             "/folder": self.cmd_folder,
             "/terms": self.cmd_terms,
             "/search": self.cmd_search,
+            "/research": self.cmd_research,
         }.get(cmd)
         if handler is None:
             raise ShellError(f"unknown command {cmd}; try /help")
@@ -402,6 +419,15 @@ class Shell:
             return
         self.pending = None
         self.console.print(Text(f"Late result for: {pending.question}", style="bold yellow"))
+        if pending.research_phase:
+            if "error" in pending.result:
+                self._mark_research_error(pending.result["error"])
+                self._report_error(pending.result["error"], adopt_session=False)
+            elif "value" in pending.result:
+                self._accept_research(
+                    pending.result["value"], pending.research_sources or ([], False)
+                )
+            return
         if pending.folder_scoped:
             adopt = pending.session_epoch == self._folder_epoch
             if "error" in pending.result:
@@ -440,6 +466,128 @@ class Shell:
                     style="dim",
                 )
             )
+
+    def cmd_research(self, args: list[str]) -> None:
+        usage = "usage: /research plan TOPIC | start | show | history | read ID | save FILE"
+        if not args:
+            raise ShellError(usage)
+        action = args[0].lower()
+        if action == "show" and len(args) == 1:
+            if not self.last_research:
+                raise ShellError("no research result yet")
+            render.render_research(self.console, self.last_research)
+            return
+        if action == "save" and len(args) == 2:
+            if not self.last_research:
+                raise ShellError("no research result yet")
+            path = Path(args[1]).expanduser()
+            # Never overwrite existing files; tenant reports should not inherit
+            # a permissive umask or overwrite a symlink target.
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as out:
+                json.dump(self.last_research, out, ensure_ascii=False, indent=2)
+                out.write("\n")
+            self.console.print(Text(f"Saved research JSON to {path}"))
+            return
+        if action == "read" and len(args) == 2:
+            response = self._run(lambda: self.chat.get_research(args[1]), "Reading saved research")
+            self.last_research = response
+            render.render_research(self.console, response)
+            return
+        if action == "history" and len(args) == 1:
+            if not self.last_research:
+                raise ShellError("no research session yet")
+            session_id = self.last_research["session"]
+            session = self._run(
+                lambda: self.chat.get_session(session_id, include_answer_details=True),
+                "Reading research session",
+            )
+            self.console.print(Text("Saved research session (stage labels may be absent)."))
+            # Do not concatenate intermediate blocks into a supposed report.
+            self.console.print_json(data=session)
+            return
+        if (
+            action not in {"plan", "start"}
+            or (action == "plan" and len(args) < 2)
+            or (action == "start" and len(args) != 1)
+        ):
+            raise ShellError(usage)
+        if self.pending is not None:
+            raise ShellError("an earlier generation is still running; wait for its result")
+        if self.config.sharepoint_folder:
+            raise ShellError("Deep Research does not enforce folder scope; /folder off first")
+        chat = self.chat
+        if action == "plan":
+            self.research_plan = None
+            self._research_started = True
+            topic = " ".join(args[1:])
+            sources = (list(self.config.data_stores), self.config.web_grounding)
+
+            def call() -> Any:
+                return chat.plan_research(
+                    topic, data_store_ids=sources[0], web_grounding=sources[1]
+                )
+        else:
+            if not self.research_plan:
+                raise ShellError("create and review /research plan TOPIC first")
+            if self._research_started:
+                raise ShellError(
+                    "this plan already has a start attempt; "
+                    "inspect /research history or the UI, do not resend"
+                )
+            sources = self._research_sources
+            session_id = self.research_plan["session"]
+            # Guard even a failed/abandoned call: delivery may be uncertain.
+            self._research_started = True
+
+            def call() -> Any:
+                return chat.start_research(
+                    session_id, data_store_ids=sources[0], web_grounding=sources[1]
+                )
+
+        self.console.print(
+            Text(
+                "Deep Research: no retries, no model override, no folder isolation. "
+                "May take 15+ minutes.",
+                style="yellow",
+            )
+        )
+        try:
+            response = self._run(call, f"Deep Research {action}")
+        except _Abandoned as abandoned:
+            self.pending = _Pending(
+                f"research {action}",
+                abandoned.thread,
+                0,
+                abandoned.result,
+                research_phase=action,
+                research_sources=sources,
+            )
+            self.last_command_failed = True
+            self.console.print(
+                Text(
+                    "Stopped waiting; the research request is not resent. "
+                    "A late result will be shown.",
+                    style="yellow",
+                )
+            )
+            return
+        except Exception as err:
+            self._mark_research_error(err)
+            raise
+        self._accept_research(response, sources)
+
+    def _mark_research_error(self, err: BaseException) -> None:
+        with contextlib.suppress(AttributeError):
+            err.gesh_research = True  # type: ignore[attr-defined]
+
+    def _accept_research(self, response: dict[str, Any], sources: tuple[list[str], bool]) -> None:
+        self.last_research = response
+        if response["requested_phase"] == "plan":
+            self.research_plan = response
+            self._research_sources = sources
+            self._research_started = False
+        render.render_research(self.console, response)
 
     def cmd_new(self, args: list[str]) -> None:
         if self.config.sharepoint_folder:
@@ -743,13 +891,23 @@ class Shell:
     # ----------------------------------------------------------------- helpers
     def _report_error(self, err: BaseException, *, adopt_session: bool = True) -> None:
         session = getattr(err, "session", None)
-        if session and adopt_session and not getattr(err, "gesh_folder_scoped", False):
+        if (
+            session
+            and adopt_session
+            and not getattr(err, "gesh_folder_scoped", False)
+            and not getattr(err, "gesh_research", False)
+        ):
             self.session = session
         self.console.print(Text(f"error: {err}", style="red"))
         if getattr(err, "do_not_retry", False):
             self.console.print(
                 Text(
-                    "Not retried. Check /history before asking again"
+                    (
+                        "Not retried. Check /research history or the research UI "
+                        "before starting again"
+                        if getattr(err, "gesh_research", False)
+                        else "Not retried. Check /history before asking again"
+                    )
                     + (f" (session {render.short_id(session)})." if session else "."),
                     style="yellow",
                 )

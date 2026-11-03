@@ -10,8 +10,9 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use gemini_chat::{
     AssistRequest, AssistResponse, EnvTokenProvider, FolderAnswer, FolderAnswerRequest,
-    GcloudTokenProvider, GeminiEnterpriseClient, GeminiEnterpriseConfig, SearchRequest,
-    SearchResults, SharePointFolder, TokenProvider,
+    GcloudTokenProvider, GeminiEnterpriseClient, GeminiEnterpriseConfig, ResearchPhase,
+    ResearchPlanRequest, ResearchResponse, ResearchStartRequest, SearchRequest, SearchResults,
+    SharePointFolder, TokenProvider,
 };
 
 const TOKEN_ENV: &str = "GEMINI_CHAT_ACCESS_TOKEN";
@@ -62,7 +63,7 @@ struct GlobalArgs {
     /// Token source: gcloud (`gcloud auth print-access-token`) or env (GEMINI_CHAT_ACCESS_TOKEN).
     #[arg(long, value_enum, env = "GEMINI_CHAT_AUTH", default_value_t = Auth::Gcloud, global = true)]
     auth: Auth,
-    /// Per-request timeout, e.g. 6m or 90s (default 6m).
+    /// Per-request timeout, e.g. 30m or 90s (default: chat 6m; research 30m).
     #[arg(long, value_parser = humantime::parse_duration, global = true)]
     timeout: Option<Duration>,
     /// Override the API base (must end in /v1). Intended for tests and proxies.
@@ -83,6 +84,11 @@ enum Auth {
 enum Command {
     /// Ask once. Never retries generation or falls back to another model.
     Ask(AskArgs),
+    /// Built-in Deep Research via official API (tenant entitlement/allowlist required).
+    Research {
+        #[command(subcommand)]
+        command: ResearchCommand,
+    },
     /// Read a saved server session and its service-reported model metadata (no generation).
     /// Prints a summary, or the full session with --json.
     Session(SessionArgs),
@@ -93,6 +99,39 @@ enum Command {
     /// --search-terms, then an answer from just those files (one generation). The CLI
     /// is single-turn; use gesh or the Python client for trusted multi-turn sessions.
     Answer(FolderAnswerArgs),
+}
+
+#[derive(Subcommand)]
+enum ResearchCommand {
+    /// Create a new topic/plan; does NOT automatically start research.
+    Plan {
+        #[command(flatten)]
+        sources: ResearchSources,
+        topic: String,
+    },
+    /// Read/recover the latest saved assistant answer. Never starts or retries generation.
+    Read {
+        #[arg(long, value_name = "ID")]
+        session_id: String,
+    },
+    /// Start research ONCE in the plan's session. May take 15+ minutes; never retries.
+    /// Keep the same sources as the plan. On timeout, inspect the session/UI first.
+    Start {
+        #[arg(long, value_name = "ID")]
+        session_id: String,
+        #[command(flatten)]
+        sources: ResearchSources,
+    },
+}
+
+#[derive(Args)]
+struct ResearchSources {
+    /// Select datastores (repeatable); NOT folder/file isolation. Omit for engine defaults.
+    #[arg(long = "data-store-id", value_name = "ID")]
+    data_stores: Vec<String>,
+    /// Opt in to public web grounding (requires tenant support).
+    #[arg(long)]
+    web_grounding: bool,
 }
 
 #[derive(Args)]
@@ -181,6 +220,7 @@ async fn run(cli: Cli) -> Result<()> {
     config.collection_id = global.collection_id;
     if let Some(timeout) = global.timeout {
         config.timeout = timeout;
+        config.research_timeout = timeout;
     }
     let provider: Arc<dyn TokenProvider> = match global.auth {
         Auth::Gcloud => Arc::new(GcloudTokenProvider::default()),
@@ -192,6 +232,30 @@ async fn run(cli: Cli) -> Result<()> {
     }
 
     match cli.command {
+        Command::Research { command } => {
+            if !matches!(&command, ResearchCommand::Read { .. }) {
+                eprintln!("Deep Research: one request, no automatic retries; responses may be buffered for 15+ minutes.");
+            }
+            let response = match command {
+                ResearchCommand::Read { session_id } => client.get_research(&session_id).await?,
+                ResearchCommand::Plan { sources, topic } => {
+                    let mut request = ResearchPlanRequest::new(topic);
+                    request.data_stores = sources.data_stores;
+                    request.web_grounding = sources.web_grounding;
+                    client.plan_research(request).await?
+                }
+                ResearchCommand::Start {
+                    session_id,
+                    sources,
+                } => {
+                    let mut request = ResearchStartRequest::new(session_id);
+                    request.data_stores = sources.data_stores;
+                    request.web_grounding = sources.web_grounding;
+                    client.start_research(request).await?
+                }
+            };
+            emit_research(&response, global.json)?;
+        }
         Command::Ask(args) => {
             let mut request = AssistRequest::new(args.question);
             request.model_id = args.model;
@@ -355,4 +419,63 @@ fn is_broken_pipe(err: &anyhow::Error) -> bool {
             .downcast_ref::<io::Error>()
             .is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe)
     })
+}
+
+fn emit_research(response: &ResearchResponse, json_mode: bool) -> Result<()> {
+    let mut out = io::stdout().lock();
+    if json_mode {
+        writeln!(out, "{}", serde_json::to_string_pretty(response)?)?;
+    } else {
+        writeln!(out, "Session: {}", response.session)?;
+        writeln!(
+            out,
+            "Requested agent: {} | phase: {:?}",
+            response
+                .requested_agent
+                .as_deref()
+                .unwrap_or("not requested (read-only)"),
+            response.requested_phase
+        )?;
+        // A plan may contain several blocks; show all, not just its last fragment.
+        for (i, block) in response.contents.iter().enumerate() {
+            let selected = response.requested_phase == ResearchPhase::Plan
+                || response.report_indices.contains(&i)
+                || response.final_text_candidate_index == Some(i);
+            if selected {
+                let label = block
+                    .kind
+                    .as_deref()
+                    .unwrap_or("unclassified text (stage unverified)");
+                if let Some(text) = &block.text {
+                    writeln!(out, "\n[{i}] {label}\n{text}")?;
+                    let refs: usize = block.grounding.iter().map(|g| g.references.len()).sum();
+                    writeln!(
+                        out,
+                        "Native reference entries: {refs} (not distinct sources)"
+                    )?;
+                }
+            }
+            if let Some(file) = &block.file {
+                writeln!(
+                    out,
+                    "File: {} ({}) — metadata only; no download implemented",
+                    file.file_id, file.mime_type
+                )?;
+            }
+        }
+        writeln!(
+            out,
+            "\n{} visible block(s); --json preserves all content and native grounding.",
+            response.contents.len()
+        )?;
+        if response.requested_phase == ResearchPhase::Plan {
+            writeln!(out, "Review the plan, then explicitly run: gemini-chat research start --session-id {} [same source flags]", response.session)?;
+        }
+    }
+    out.flush()?;
+    drop(out);
+    for warning in &response.warnings {
+        eprintln!("Warning: {warning}");
+    }
+    Ok(())
 }

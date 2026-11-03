@@ -1,11 +1,13 @@
 # gesh — Gemini Enterprise shell
 
-A line-based terminal shell for the two Gemini Enterprise features available through
+A line-based terminal shell for Gemini Enterprise features available through
 official Google APIs:
 
 - **Chat** with the Gemini Enterprise assistant (Discovery Engine v1 `streamAssist`):
   explicit model, datastore-scoped retrieval (e.g. SharePoint), server sessions,
   native citations.
+- **Deep Research** through the built-in official agent: plan, explicitly start,
+  inspect and save results in a separate research session.
 - **Notebooks** in NotebookLM Enterprise: list, inspect sources, create, add web/file
   sources, delete.
 
@@ -125,6 +127,31 @@ Also `--sharepoint-folder` / `--search-terms` (or `GESH_SHAREPOINT_FOLDER` /
 which the answer's warnings report. Folder mode needs **exactly one** datastore, the
 SharePoint file datastore (`/ds clear`, then `/ds add ID`); see the guide's "End to
 end" steps for finding its ID.
+
+### Deep Research
+
+```text
+/research plan Compare strategies for testing a CLI API client; plan only.
+/research start
+/research show
+/research history
+/research read SAVED_SESSION_ID
+/research save research.json
+```
+
+Review before `start`; it is never sent automatically. Research has a separate
+30-minute SDK timeout, does not use `/model`, and pins the plan's datastore/web
+settings. One start attempt per plan is allowed, including after uncertainty.
+Ctrl-C stops waiting, not server work; wait for the late result, use read-only
+`/research read ID`, or inspect the UI. Reading never imports authorization to start.
+Research sessions/results do not replace chat or folder sessions. Active folder
+mode is rejected for generation because research has **no folder isolation**.
+
+Public v1 currently omits research-stage labels. The last text block is displayed
+as an **unverified candidate**, not as a guaranteed report; all content and native
+grounding can be saved as JSON. `/research save` creates a private new file and
+refuses overwrites. Audio is file metadata only. See the
+[Deep Research guide](../docs/guides/deep-research.md) for details.
 
 ### Notebook commands
 

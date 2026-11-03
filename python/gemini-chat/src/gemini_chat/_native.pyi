@@ -42,6 +42,7 @@ class GeminiEnterpriseClient:
         assistant_id: str = "default_assistant",
         timeout_secs: float = 360.0,
         base_url: str | None = None,
+        research_timeout_secs: float = 1800.0,
     ) -> None: ...
     def ask(
         self,
@@ -53,6 +54,29 @@ class GeminiEnterpriseClient:
         web_grounding: bool = False,
     ) -> GeminiAssistResponse:
         """Generate once, with no automatic POST retries or model fallback."""
+    def plan_research(
+        self,
+        topic: str,
+        *,
+        data_store_ids: list[str] | None = None,
+        web_grounding: bool = False,
+    ) -> dict[str, Any]:
+        """New Deep Research plan; no automatic start. Returns session, contents,
+        report_indices, final_text_candidate_index, warnings. Public v1 may omit stages."""
+    def start_research(
+        self,
+        session_id: str,
+        *,
+        data_store_ids: list[str] | None = None,
+        web_grounding: bool = False,
+    ) -> dict[str, Any]:
+        """Start ONCE in the plan's session with the same sources; may take 15+ minutes.
+        No retries/model override. Returned contents keep text/grounding/file metadata
+        separate; only labelled reports enter report_indices. Never assume a candidate
+        is a completed report. Datastore selection is not folder isolation."""
+    def get_research(self, session_id: str) -> dict[str, Any]:
+        """Recover the latest saved assistant answer without generation. requested_phase
+        is read and requested_agent is None; this does not attest original routing."""
     def get_session(
         self, session_id: str, *, include_answer_details: bool = False
     ) -> dict[str, Any]:

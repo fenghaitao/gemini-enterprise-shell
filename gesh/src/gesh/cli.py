@@ -21,7 +21,7 @@ from .shell import Shell
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="gesh",
-        description="Line-based shell for Gemini Enterprise: assistant chat and NotebookLM "
+        description="Line-based shell for Gemini Enterprise: chat, Deep Research and NotebookLM "
         "Enterprise notebooks. Settings default to GESH_* then NBLM_* environment variables.",
     )
     p.add_argument("--project-number", help="Google Cloud project number [PROJECT_NUMBER]")
@@ -159,7 +159,7 @@ def _interactive_loop(shell: Shell, *, history_enabled: bool = True) -> None:
         bottom_toolbar=shell.toolbar,
     )
     shell.console.print(
-        f"gesh {__version__} — Gemini Enterprise chat and notebooks. /help for commands, "
+        f"gesh {__version__} — Gemini Enterprise chat, research and notebooks. /help for commands, "
         "Ctrl-D to quit."
     )
     while True:

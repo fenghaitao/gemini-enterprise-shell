@@ -327,11 +327,20 @@ shape. No network request happens during client construction.
   content: keep them private and out of version control. Python post-dispatch
   `GeminiChatError` exposes `session` (when known) and `do_not_retry=True`.
 
+## Deep Research
+
+The built-in `deep_research` agent is supported via explicit `research plan` and
+`research start` commands, plus Rust/Python SDK methods and gesh. See the
+[Deep Research guide](deep-research.md) for the two-step workflow, research-specific
+30-minute deadline, live-validated protocol, and public API stage-label limitation.
+It does not inherit folder isolation and does not accept a model override.
+
 ## Tool boundaries
 
-This version exposes enterprise search and optional web grounding, **not mutative
-connector actions, arbitrary shell/Python function calls, media generation or
-agent/workflow execution**. The wider public API also defines other managed tool
+This version exposes enterprise search, optional web grounding, and the built-in
+Deep Research workflow, **not mutative connector actions, arbitrary shell/Python
+function calls, arbitrary agents/workflows or general media generation**. Research
+may return audio-summary file metadata; no download is implemented. The wider public API also defines other managed tool
 specifications and calls to certain registered agents, but these were not added
 just because the schema mentions them.
 

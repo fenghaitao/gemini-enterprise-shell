@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import stat
 import threading
@@ -82,6 +83,22 @@ class FakeChat:
             "hits": [{"title": "A-0001", "uri": "u", "content": "x"}],
             "warnings": [],
         }
+
+    def plan_research(self, topic: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"research": "plan", "topic": topic, **kwargs})
+        if self.fail:
+            raise self.fail
+        return _research_result("plan")
+
+    def start_research(self, session_id: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"research": "start", "session_id": session_id, **kwargs})
+        if self.fail:
+            raise self.fail
+        return _research_result("start")
+
+    def get_research(self, session_id: str) -> dict[str, Any]:
+        self.history_calls.append(session_id)
+        return _research_result("read")
 
     def get_session(self, session_id: str, include_answer_details: bool = False) -> dict[str, Any]:
         self.history_calls.append(session_id)
@@ -616,3 +633,121 @@ def test_session_command_is_folder_aware() -> None:
     assert shell.folder_session
     shell.handle("/session")
     assert "Current folder session:" in out.getvalue()
+
+
+def _research_result(phase: str) -> dict[str, Any]:
+    return {
+        "session": f"{ENGINE}/sessions/research",
+        "requested_phase": phase,
+        "contents": [
+            {"text": "intermediate material", "kind": None, "grounding": [], "file": None},
+            {"text": "final candidate", "kind": None, "grounding": [], "file": None},
+        ],
+        "report_indices": [],
+        "final_text_candidate_index": 1,
+        "warnings": ["stage labels absent; unverified"],
+    }
+
+
+def test_research_separate_session_explicit_start_and_pinned_sources(tmp_path: Any) -> None:
+    shell, chat, _, out = make_shell()
+    shell.handle("chat question")
+    chat_session = shell.session
+    shell.handle("/research plan test CLI clients")
+    assert len(chat.calls) == 2  # no automatic start
+    shell.handle("/ds clear")
+    shell.handle("/ds add changed")
+    shell.handle("/web on")
+    shell.handle("/research start")
+    assert chat.calls[-1] == {
+        "research": "start",
+        "session_id": f"{ENGINE}/sessions/research",
+        "data_store_ids": ["ds1"],
+        "web_grounding": False,
+    }
+    assert shell.session == chat_session
+    before = len(chat.calls)
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    assert len(chat.calls) == before
+    path = tmp_path / "research.json"
+    shell.handle(f"/research save {path}")
+    assert not shell.last_command_failed
+    assert json.loads(path.read_text())["contents"][0]["text"] == "intermediate material"
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    shell.handle(f"/research save {path}")
+    assert shell.last_command_failed  # no overwrite
+    shell.handle("/research history")
+    assert chat.history_calls[-1] == f"{ENGINE}/sessions/research"
+    assert "stage unverified" in out.getvalue()
+
+
+def test_research_refuses_folder_scope_and_start_without_plan() -> None:
+    shell, chat, _, out = make_shell()
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    shell.handle("/folder https://example.sharepoint.com/sites/eng/Docs")
+    shell.handle("/research plan topic")
+    assert shell.last_command_failed
+    assert not chat.calls
+    assert "does not enforce folder scope" in out.getvalue()
+
+
+def test_failed_research_does_not_hijack_chat_or_resend() -> None:
+    shell, chat, _, _ = make_shell()
+    shell.handle("/research plan topic")
+    shell.session = "chat-original"
+    chat.fail = FakeError("delivery uncertain", f"{ENGINE}/sessions/research")
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    assert shell.session == "chat-original"
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    assert len(chat.calls) == 2
+
+
+def test_abandoned_research_blocks_generations_and_accepts_late_result() -> None:
+    ready = threading.Event()
+    thread = threading.Thread(target=lambda: ready.wait(2))
+    thread.start()
+    result: dict[str, Any] = {}
+
+    def abandon(func: Any, label: str) -> Any:
+        result["value"] = func()
+        raise _Abandoned(thread, result)
+
+    shell, chat, _, _ = make_shell(runner=abandon)
+    shell.session = "chat-original"
+    shell.handle("/research plan topic")
+    assert shell.pending is not None
+    shell.handle("/research plan another")
+    assert shell.last_command_failed
+    shell.handle("normal question")
+    assert shell.last_command_failed
+    ready.set()
+    thread.join()
+    shell.poll_pending()
+    assert shell.pending is None
+    assert shell.research_plan is not None
+    assert shell.session == "chat-original"
+    assert len(chat.calls) == 1
+    shell._run = sync_runner
+    shell.handle("/research start")
+    assert not shell.last_command_failed
+    assert len(chat.calls) == 2
+
+
+def test_research_read_does_not_invoke_agent_or_import_start_authorization() -> None:
+    shell, chat, _, _ = make_shell()
+    shell.session = "chat-original"
+    shell.handle("/research read saved-research")
+    assert not shell.last_command_failed
+    assert not chat.calls
+    assert chat.history_calls == ["saved-research"]
+    assert shell.last_research is not None
+    assert shell.last_research["requested_phase"] == "read"
+    assert shell.session == "chat-original"
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    assert not chat.calls
