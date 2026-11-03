@@ -1,5 +1,5 @@
 site_name: Gemini Enterprise Shell Docs
-site_description: Terminal-first Gemini Enterprise shell with official chat/search APIs, SharePoint folder-scoped answers, and NotebookLM Enterprise support
+site_description: Terminal-first Gemini Enterprise shell with official chat/search and Deep Research APIs, SharePoint folder-scoped answers, and NotebookLM Enterprise support
 site_url: https://fenghaitao.github.io/gemini-enterprise-shell/
 repo_url: https://github.com/fenghaitao/gemini-enterprise-shell
 repo_name: fenghaitao/gemini-enterprise-shell

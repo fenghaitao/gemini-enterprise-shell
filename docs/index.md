@@ -1,8 +1,8 @@
 # Gemini Enterprise Shell Documentation
 
-Terminal-first Gemini Enterprise shell: official Gemini Enterprise chat/search APIs,
-SharePoint folder-scoped answers, and NotebookLM Enterprise support, with the
-nblm-rs stack retained as the NotebookLM foundation.
+Terminal-first Gemini Enterprise shell: official Gemini Enterprise chat/search and
+**Deep Research**, SharePoint folder-scoped answers, and NotebookLM Enterprise
+support, with the nblm-rs stack retained as the NotebookLM foundation.
 
 !!! important "Unofficial Project"
     This project is not affiliated with, sponsored, or endorsed by Google. The
@@ -20,7 +20,38 @@ nblm-rs stack retained as the NotebookLM foundation.
 
 ## Features
 
-!!! note "API Status"
+### Deep Research
+
+Research a topic through Google's built-in `deep_research` agent using the official
+Discovery Engine v1 API and OAuth. Available through **gesh, the gemini-chat CLI,
+Python, and Rust** when your tenant has Deep Research enabled/allowlisted.
+
+1. **Plan** — create a research plan without automatically starting research.
+2. **Review** — inspect the plan and its selected sources.
+3. **Start** — explicitly authorize one research attempt, then inspect or save the result.
+
+In gesh, create a plan first:
+
+```text
+/research plan Compare Rust and Python for a CLI API client.
+```
+
+After reviewing the returned plan, issue a separate command to start:
+
+```text
+/research start
+/research save research.json
+```
+
+Research uses a separate session and a **30-minute request timeout**, with **no
+automatic generation retries**. It does **not** enforce SharePoint folder/file
+isolation. Keep saved reports private and out of Git.
+
+Read the [Deep Research guide](guides/deep-research.md) for setup, source selection,
+CLI/SDK examples, read-only recovery, and the limitations of public result-stage
+labels. A final-text candidate without a service-labelled report is **unverified**.
+
+!!! note "NotebookLM API Status"
     The NotebookLM API is currently in **alpha**. Some features may not work as documented due to API limitations. See [API Limitations](api/limitations.md) for details.
 
 ### Notebooks
@@ -60,9 +91,11 @@ nblm-rs stack retained as the NotebookLM foundation.
 
 - [Assistant Guide](guides/gemini-enterprise-chat.md) - Official Discovery Engine v1
   assistant usage, authentication, sessions, grounding, and SharePoint folder isolation
+- [Deep Research](guides/deep-research.md) - Plan, review, explicitly start, and recover
+  research through the official API, with separate sessions and no generation retries
 - [gesh Shell](https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/gesh/README.md) -
-  Interactive terminal shell: Gemini Enterprise chat, folder-scoped Q&A, and NotebookLM
-  commands in one shell
+  Interactive terminal shell: Gemini Enterprise chat, Deep Research, folder-scoped
+  Q&A, and NotebookLM commands in one shell
 
 ## CLI Reference
 
