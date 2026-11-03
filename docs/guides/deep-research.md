@@ -177,7 +177,10 @@ or `/web` changed afterwards. It allows only **one start attempt per plan per
 process**, including after failure or Ctrl-C; use read-only recovery or inspect
 history/UI instead of resending. A successful `/research read` clears any pending
 plan and its source binding, even when reading the same session: read-only results
-never authorize starting. Create and review a new plan before another start.
+never authorize starting. Late plans dispatched before that read remain visible
+and savable, but cannot restore authorization. Create and review a new plan before
+another start. A late plan first surfaced by `/research start` cannot start on
+that same input: review it, then issue a fresh `/research start` command.
 This guard is not durable across processes. Research generation commands reject
 active folder mode (`/folder off` first). An abandoned generation blocks further
 generations until its result arrives and does not hijack the chat session. Saved

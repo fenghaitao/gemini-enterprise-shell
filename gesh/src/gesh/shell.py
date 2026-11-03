@@ -87,6 +87,7 @@ class _Pending:
     folder: str | None = None
     search_terms: str | None = None
     research_phase: str | None = None
+    research_epoch: int | None = None
     research_sources: tuple[list[str], bool] | None = None
 
 
@@ -130,6 +131,11 @@ class Shell:
         self.research_plan: dict[str, Any] | None = None
         self._research_sources: tuple[list[str], bool] = ([], False)
         self._research_started = False
+        # Reading a saved result or requesting a new plan invalidates older
+        # in-flight plan authorization, without discarding the late result.
+        self._research_epoch = 0
+        self._input_epoch = 0
+        self._research_plan_input_epoch = 0
         # Last folder-scoped answer (a dict); /refs shows whichever answer came last.
         self.last_folder_answer: dict[str, Any] | None = None
         # Folder answers use their own server session, separate from the chat session.
@@ -194,6 +200,9 @@ class Shell:
     def handle(self, line: str) -> bool:
         """Process one input line. Returns False when the shell should exit."""
         self.last_command_failed = False
+        # A plan surfaced by this input's poll was not visible when it was
+        # typed. Only a subsequent input may authorize starting that plan.
+        self._input_epoch += 1
         self.poll_pending()
         text = line.strip()
         if not text:
@@ -425,7 +434,9 @@ class Shell:
                 self._report_error(pending.result["error"], adopt_session=False)
             elif "value" in pending.result:
                 self._accept_research(
-                    pending.result["value"], pending.research_sources or ([], False)
+                    pending.result["value"],
+                    pending.research_sources or ([], False),
+                    authorize_plan=pending.research_epoch == self._research_epoch,
                 )
             return
         if pending.folder_scoped:
@@ -493,6 +504,7 @@ class Shell:
             response = self._run(lambda: self.chat.get_research(args[1]), "Reading saved research")
             # Imported/read-only results must not leave a different, no-longer
             # displayed plan authorized for a later Start Research command.
+            self._research_epoch += 1
             self.research_plan = None
             self._research_sources = ([], False)
             self._research_started = True
@@ -526,6 +538,7 @@ class Shell:
             raise ShellError("Deep Research does not enforce folder scope; /folder off first")
         chat = self.chat
         if action == "plan":
+            self._research_epoch += 1
             self.research_plan = None
             self._research_started = True
             topic = " ".join(args[1:])
@@ -542,6 +555,11 @@ class Shell:
                 raise ShellError(
                     "this plan already has a start attempt; "
                     "inspect /research history or the UI, do not resend"
+                )
+            if self._research_plan_input_epoch >= self._input_epoch:
+                raise ShellError(
+                    "review the plan just displayed, then issue /research start again "
+                    "as a fresh command"
                 )
             sources = self._research_sources
             session_id = self.research_plan["session"]
@@ -560,6 +578,7 @@ class Shell:
                 style="yellow",
             )
         )
+        research_epoch = self._research_epoch
         try:
             response = self._run(call, f"Deep Research {action}")
         except _Abandoned as abandoned:
@@ -569,6 +588,7 @@ class Shell:
                 0,
                 abandoned.result,
                 research_phase=action,
+                research_epoch=research_epoch,
                 research_sources=sources,
             )
             self.last_command_failed = True
@@ -583,18 +603,35 @@ class Shell:
         except Exception as err:
             self._mark_research_error(err)
             raise
-        self._accept_research(response, sources)
+        self._accept_research(
+            response, sources, authorize_plan=research_epoch == self._research_epoch
+        )
 
     def _mark_research_error(self, err: BaseException) -> None:
         with contextlib.suppress(AttributeError):
             err.gesh_research = True  # type: ignore[attr-defined]
 
-    def _accept_research(self, response: dict[str, Any], sources: tuple[list[str], bool]) -> None:
+    def _accept_research(
+        self,
+        response: dict[str, Any],
+        sources: tuple[list[str], bool],
+        *,
+        authorize_plan: bool,
+    ) -> None:
         self.last_research = response
-        if response["requested_phase"] == "plan":
+        if response["requested_phase"] == "plan" and authorize_plan:
             self.research_plan = response
             self._research_sources = sources
             self._research_started = False
+            self._research_plan_input_epoch = self._input_epoch
+        elif response["requested_phase"] == "plan":
+            self.console.print(
+                Text(
+                    "Late plan is read-only because research context changed; "
+                    "create and review /research plan TOPIC before starting.",
+                    style="yellow",
+                )
+            )
         render.render_research(self.console, response)
 
     def cmd_new(self, args: list[str]) -> None:

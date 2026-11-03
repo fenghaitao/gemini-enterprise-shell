@@ -814,3 +814,83 @@ def test_research_read_clears_an_existing_plan_start_authorization(read_id: str)
     shell.handle("/research start")
     assert not shell.last_command_failed
     assert chat.calls[-1]["data_store_ids"] == ["changed"]
+
+
+@pytest.mark.parametrize("read_id", [None, "another-research", "research"])
+def test_late_research_plan_cannot_start_on_the_input_that_surfaces_it(
+    read_id: str | None, tmp_path: Any
+) -> None:
+    ready = threading.Event()
+    result: dict[str, Any] = {}
+    thread: threading.Thread | None = None
+
+    def abandon(func: Any, label: str) -> Any:
+        def finish() -> None:
+            ready.wait()
+            result["value"] = func()
+
+        nonlocal thread
+        thread = threading.Thread(target=finish, daemon=True)
+        thread.start()
+        raise _Abandoned(thread, result)
+
+    shell, chat, _, out = make_shell(runner=abandon)
+    shell.session = "chat-original"
+    shell.folder_session = "folder-original"
+    try:
+        shell.handle("/research plan topic A")
+        assert shell.pending is not None
+        shell._run = sync_runner
+        if read_id is not None:
+            # Read B (or even A) before A has finished. The late plan must
+            # remain inspectable, but can never restore start authorization.
+            shell.handle(f"/research read {read_id}")
+            assert not shell.last_command_failed
+            assert shell.research_plan is None
+        ready.set()
+        assert thread is not None
+        thread.join(5)
+        assert not thread.is_alive()
+
+        # handle() surfaces the late plan before dispatching this very input;
+        # the user could not have reviewed it when they typed /research start.
+        shell.handle("/research start")
+        assert shell.last_command_failed
+        assert shell.pending is None
+        assert [call["research"] for call in chat.calls] == ["plan"]
+        assert "Late result for: research plan" in out.getvalue()
+        assert shell.session == "chat-original"
+        assert shell.folder_session == "folder-original"
+        assert shell.last_research == result["value"]
+        if read_id is None:
+            assert shell.research_plan is not None
+            assert "review the plan" in out.getvalue()
+            # A fresh user command, after seeing the plan, may start it once.
+            shell.handle("/research start")
+            assert not shell.last_command_failed
+            assert [call["research"] for call in chat.calls] == ["plan", "start"]
+        else:
+            assert shell.research_plan is None
+            assert shell._research_sources == ([], False)
+            assert "Late plan is read-only" in out.getvalue()
+            shell.handle("/research show")
+            path = tmp_path / "late-plan.json"
+            shell.handle(f"/research save {path}")
+            assert not shell.last_command_failed
+            assert json.loads(path.read_text()) == result["value"]
+            shell.handle("/research start")
+            assert shell.last_command_failed  # still stale on later commands
+            assert len(chat.calls) == 1
+            assert chat.history_calls == [read_id]
+            # Only explicit new planning restores start authorization.
+            shell.handle("/ds clear")
+            shell.handle("/ds add changed")
+            shell.handle("/research plan topic C")
+            shell.handle("/research start")
+            assert not shell.last_command_failed
+            assert [call["research"] for call in chat.calls] == ["plan", "plan", "start"]
+            assert chat.calls[-1]["data_store_ids"] == ["changed"]
+    finally:
+        ready.set()
+        if thread is not None:
+            thread.join(5)
