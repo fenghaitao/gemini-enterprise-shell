@@ -83,8 +83,11 @@ idempotency key, or durable cross-process replay guard in this implementation.
   are excluded.
 - `report_indices`: only nonempty text blocks explicitly labelled `RESEARCH_REPORT`
   by the service. Optional stage labels are preserved if the service returns them.
-- `final_text_candidate_index`: the last nonempty text block **only when all stage
-  labels are absent**. This is a convenience candidate, **not an attested report**.
+- `final_text_candidate_index`: a convenience candidate **only when no nonempty,
+  service-labelled `RESEARCH_REPORT` exists**. Prefer the last nonempty unlabelled
+  text block (including mixed-label responses); otherwise use the last nonempty
+  labelled text block. It is always displayed as **unverified**, even if its native
+  label is `RESEARCH_ANSWER` or another intermediate stage, **not an attested report**.
 - `warnings`, `invocation_tools`.
 
 **Verified limitation (2026-11-02):** public v1 responses and session reads omitted
@@ -109,7 +112,8 @@ not double-count them. Other negative/out-of-range reference indices still fail.
 are not necessarily distinct sources and do not establish citation truthfulness.
 The existing limits remain 16 MiB and 10,000 frames.
 
-Audio summaries, when returned, retain `fileId` and `mimeType` as **metadata only**.
+Audio summaries, when returned, retain `fileId` and optional `mimeType` as
+**metadata only**. Missing MIME types are displayed as unavailable, never inferred.
 No guessed download URL or unsupported download API is exposed. Private
 `assistToken`, cookies and browser storage are not included in research results.
 
@@ -171,7 +175,10 @@ Research sessions are separate from chat and folder-answer sessions:
 `start` uses the successful plan's captured datastore/web settings even if `/ds`
 or `/web` changed afterwards. It allows only **one start attempt per plan per
 process**, including after failure or Ctrl-C; use read-only recovery or inspect
-history/UI instead of resending. This guard is not durable across processes. Research generation commands reject
+history/UI instead of resending. A successful `/research read` clears any pending
+plan and its source binding, even when reading the same session: read-only results
+never authorize starting. Create and review a new plan before another start.
+This guard is not durable across processes. Research generation commands reject
 active folder mode (`/folder off` first). An abandoned generation blocks further
 generations until its result arrives and does not hijack the chat session. Saved
 JSON includes every visible block/grounding, uses private POSIX permissions, and

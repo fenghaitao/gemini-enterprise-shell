@@ -524,3 +524,54 @@ async fn research_read_recovers_without_sending_a_generation() {
     assert_eq!(value["contents"][0]["text"], "Answer");
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn research_renders_mixed_stage_candidate_and_audio_without_mime_type() {
+    let server = MockServer::start().await;
+    let mut v = response(false);
+    v[0]["answer"]["replies"] = json!([
+        {"groundedContent":{"content":{"text":"Question"},"contentMetadata":{"contentKind":"RESEARCH_QUESTION"}}},
+        {"groundedContent":{"content":{"text":"Intermediate"},"contentMetadata":{"contentKind":"RESEARCH_ANSWER"}}},
+        {"groundedContent":{"content":{"text":"Final grounded text"},"textGroundingMetadata":{"references":[{"documentMetadata":{"uri":"https://example.test/doc"}}]}}},
+        {"groundedContent":{"content":{"file":{"fileId":"1234"}}}}
+    ]);
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "name":format!("{ENGINE}/sessions/456"),
+            "turns":[{"detailedAssistAnswer":v[0]["answer"]}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    command(&server)
+        .args(["research", "read", "--session-id", "456"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Final grounded text"))
+        .stdout(predicate::str::contains("unverified final-text candidate"))
+        .stdout(predicate::str::contains(
+            "File: 1234 (MIME type unavailable)",
+        ))
+        .stdout(predicate::str::contains("Intermediate").not())
+        .stderr(predicate::str::contains("unverified"));
+}
+
+#[tokio::test]
+async fn research_labels_a_labelled_fallback_as_an_unverified_candidate() {
+    let server = MockServer::start().await;
+    let mut v = response(false);
+    v[0]["answer"]["replies"][0]["groundedContent"]["contentMetadata"] =
+        json!({"contentKind":"RESEARCH_ANSWER"});
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(v))
+        .expect(1)
+        .mount(&server)
+        .await;
+    command(&server)
+        .args(["research", "start", "--session-id", "456"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("RESEARCH_ANSWER"))
+        .stdout(predicate::str::contains("unverified final-text candidate"))
+        .stdout(predicate::str::contains("Answer"));
+}

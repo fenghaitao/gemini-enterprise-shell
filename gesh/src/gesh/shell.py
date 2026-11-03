@@ -491,7 +491,15 @@ class Shell:
             return
         if action == "read" and len(args) == 2:
             response = self._run(lambda: self.chat.get_research(args[1]), "Reading saved research")
+            # Imported/read-only results must not leave a different, no-longer
+            # displayed plan authorized for a later Start Research command.
+            self.research_plan = None
+            self._research_sources = ([], False)
+            self._research_started = True
             self.last_research = response
+            self.console.print(
+                Text("Read-only result; pending research plan authorization cleared.")
+            )
             render.render_research(self.console, response)
             return
         if action == "history" and len(args) == 1:

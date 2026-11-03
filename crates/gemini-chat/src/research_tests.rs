@@ -52,7 +52,10 @@ fn public_response_preserves_blocks_without_inventing_a_report_or_agent_attestat
     assert!(r.contents[1].kind.is_none());
     assert_eq!(r.contents[1].grounding.len(), 1); // terminal repeat not double counted
     assert_eq!(r.contents[1].grounding[0].segments[0]["startIndex"], "0");
-    assert_eq!(r.contents[2].file.as_ref().unwrap().mime_type, "audio/mp3");
+    assert_eq!(
+        r.contents[2].file.as_ref().unwrap().mime_type.as_deref(),
+        Some("audio/mp3")
+    );
     assert!(r.warnings.iter().any(|w| w.contains("unverified")));
     let encoded = serde_json::to_string(&r).unwrap();
     assert!(!encoded.contains("assistToken"));
@@ -66,6 +69,64 @@ fn explicit_stage_metadata_not_text_shape_identifies_report() {
     assert_eq!(r.final_text_candidate_index, None);
     assert_eq!(r.contents[1].agent.as_deref(), Some("deep_research"));
     assert!(r.warnings.is_empty());
+}
+
+#[test]
+fn mixed_stage_labels_preserve_unlabelled_grounded_report_candidate() {
+    // Documented shape: labelled intermediate Q&A, then unlabelled grounded
+    // report text. A later labelled block must not hide that candidate.
+    let mut v = capture(false);
+    v[0]["answer"]["replies"] = json!([
+        {"groundedContent":{"content":{"text":"Question"},"contentMetadata":{"contentKind":"RESEARCH_QUESTION"}}},
+        {"groundedContent":{"content":{"text":"Intermediate"},"contentMetadata":{"contentKind":"RESEARCH_ANSWER"}}}
+    ]);
+    v[2]["answer"]["replies"].as_array_mut().unwrap().push(json!(
+        {"groundedContent":{"content":{"text":"Later intermediate"},"contentMetadata":{"contentKind":"RESEARCH_ANSWER"}}}
+    ));
+    let terminal = &mut v[3]["answer"]["replies"];
+    terminal
+        .as_array_mut()
+        .unwrap()
+        .insert(0, json!({"groundedContent":{}}));
+    terminal
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"groundedContent":{}}));
+    let r = parse(v).unwrap();
+    assert!(r.report_indices.is_empty());
+    assert_eq!(r.final_text_candidate_index, Some(2));
+    assert_eq!(r.contents[2].text.as_deref(), Some("Report"));
+    assert_eq!(r.contents[2].grounding.len(), 1);
+    assert!(r.warnings.iter().any(|w| w.contains("unverified")));
+}
+
+#[test]
+fn candidate_is_unverified_even_if_only_labelled_intermediate_text_exists() {
+    let mut v = capture(false);
+    for i in [0, 1] {
+        v[i]["answer"]["replies"][0]["groundedContent"]["contentMetadata"] =
+            json!({"contentKind":"RESEARCH_ANSWER"});
+    }
+    let r = parse(v).unwrap();
+    assert!(r.report_indices.is_empty());
+    assert_eq!(r.final_text_candidate_index, Some(1));
+    assert!(r.warnings.iter().any(|w| w.contains("unverified")));
+}
+
+#[test]
+fn audio_file_mime_type_may_be_absent_or_null_without_losing_the_report() {
+    for file in [
+        json!({"fileId":"1234"}),
+        json!({"fileId":"1234","mimeType":null}),
+    ] {
+        let mut v = capture(true);
+        v[2]["answer"]["replies"][0]["groundedContent"]["content"]["file"] = file;
+        let r = parse(v).unwrap();
+        assert_eq!(r.report_indices, vec![1]);
+        let file = r.contents[2].file.as_ref().unwrap();
+        assert_eq!(file.file_id, "1234");
+        assert!(serde_json::to_value(file).unwrap()["mimeType"].is_null());
+    }
 }
 
 #[test]

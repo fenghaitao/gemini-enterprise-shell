@@ -36,6 +36,7 @@ class _Handler(BaseHTTPRequestHandler):
     status: ClassVar[int] = 200
     cited: ClassVar[bool] = True
     skipped: ClassVar[bool] = False
+    research_file: ClassVar[dict[str, object]] = {"fileId": "1234", "mimeType": "audio/mp3"}
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: ARG002
         return
@@ -118,9 +119,7 @@ class _Handler(BaseHTTPRequestHandler):
                                 {"groundedContent": {"content": {"text": "Research text"}}},
                                 {
                                     "groundedContent": {
-                                        "content": {
-                                            "file": {"fileId": "1234", "mimeType": "audio/mp3"}
-                                        }
+                                        "content": {"file": type(self).research_file}
                                     }
                                 },
                             ],
@@ -213,6 +212,7 @@ def server() -> Iterator[str]:
     _Handler.status = 200
     _Handler.cited = True
     _Handler.skipped = False
+    _Handler.research_file = {"fileId": "1234", "mimeType": "audio/mp3"}
     httpd = HTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -471,3 +471,14 @@ def test_research_recovery_is_read_only(monkeypatch: pytest.MonkeyPatch, server:
     assert len(_Handler.requests) == 1
     assert _Handler.requests[0][0] == "GET"
     assert "includeAnswerDetails=true" in _Handler.requests[0][1]
+
+
+@pytest.mark.parametrize("file", [{"fileId": "1234"}, {"fileId": "1234", "mimeType": None}])
+def test_research_audio_mime_may_be_absent_or_null(
+    monkeypatch: pytest.MonkeyPatch, server: str, file: dict[str, object]
+) -> None:
+    monkeypatch.setattr(_Handler, "research_file", file)
+    result = _client(monkeypatch, server).start_research("456")
+    assert result["contents"][0]["text"] == "Research text"
+    assert result["contents"][1]["file"] == {"fileId": "1234", "mimeType": None}
+    assert len(_Handler.requests) == 1

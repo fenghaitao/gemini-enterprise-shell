@@ -13,7 +13,7 @@ from rich.console import Console
 
 from gesh.cli import _prompt_history, build_config, main, parse_args
 from gesh.config import Config
-from gesh.render import citations, clean_snippet
+from gesh.render import citations, clean_snippet, render_research
 from gesh.shell import Shell, _Abandoned
 
 ENGINE = "projects/1/locations/us/collections/default_collection/engines/eng"
@@ -98,7 +98,9 @@ class FakeChat:
 
     def get_research(self, session_id: str) -> dict[str, Any]:
         self.history_calls.append(session_id)
-        return _research_result("read")
+        response = _research_result("read")
+        response["session"] = f"{ENGINE}/sessions/{session_id.rsplit('/', 1)[-1]}"
+        return response
 
     def get_session(self, session_id: str, include_answer_details: bool = False) -> dict[str, Any]:
         self.history_calls.append(session_id)
@@ -751,3 +753,64 @@ def test_research_read_does_not_invoke_agent_or_import_start_authorization() -> 
     shell.handle("/research start")
     assert shell.last_command_failed
     assert not chat.calls
+
+
+@pytest.mark.parametrize("mime", [{}, {"mimeType": None}, {"mimeType": "audio/mp3"}])
+def test_research_render_mixed_stage_candidate_and_optional_audio_mime(
+    mime: dict[str, Any],
+) -> None:
+    out = io.StringIO()
+    result = _research_result("read")
+    result["contents"] = [
+        {"text": "question material", "kind": "RESEARCH_QUESTION"},
+        {"text": "intermediate material", "kind": "RESEARCH_ANSWER"},
+        {"text": "final candidate", "kind": None},
+        {"file": {"fileId": "1234", **mime}},
+    ]
+    result["final_text_candidate_index"] = 2
+    render_research(Console(file=out, width=120, color_system=None), result)
+    text = out.getvalue()
+    assert "final candidate" in text
+    assert "unverified final-text candidate" in text
+    assert "intermediate material" not in text
+    assert "question material" not in text
+    assert f"File metadata: 1234 ({mime.get('mimeType') or 'MIME type unavailable'})" in text
+
+
+def test_research_render_labels_even_a_labelled_fallback_as_unverified() -> None:
+    out = io.StringIO()
+    result = _research_result("start")
+    result["contents"][1]["kind"] = "RESEARCH_ANSWER"
+    render_research(Console(file=out, width=120, color_system=None), result)
+    assert "RESEARCH_ANSWER" in out.getvalue()
+    assert "unverified final-text candidate" in out.getvalue()
+
+
+@pytest.mark.parametrize("read_id", ["another-research", "research"])
+def test_research_read_clears_an_existing_plan_start_authorization(read_id: str) -> None:
+    shell, chat, _, out = make_shell()
+    shell.session = "chat-original"
+    shell.handle("/research plan topic A")
+    assert shell.research_plan is not None
+    shell.handle(f"/research read {read_id}")
+    assert not shell.last_command_failed
+    shell.handle("/research show")
+    assert not shell.last_command_failed
+    assert shell.last_research is not None
+    assert shell.last_research["requested_phase"] == "read"
+    assert shell.last_research["session"] == f"{ENGINE}/sessions/{read_id}"
+    assert shell.research_plan is None
+    assert shell._research_sources == ([], False)
+    shell.handle("/research start")
+    assert shell.last_command_failed
+    assert len(chat.calls) == 1  # only planning; never start the old plan
+    assert chat.history_calls == [read_id]
+    assert shell.session == "chat-original"
+    assert "create and review /research plan" in out.getvalue()
+    # Explicit new planning restores authorization, using the new sources.
+    shell.handle("/ds clear")
+    shell.handle("/ds add changed")
+    shell.handle("/research plan topic C")
+    shell.handle("/research start")
+    assert not shell.last_command_failed
+    assert chat.calls[-1]["data_store_ids"] == ["changed"]

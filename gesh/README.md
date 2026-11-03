@@ -143,11 +143,14 @@ Review before `start`; it is never sent automatically. Research has a separate
 30-minute SDK timeout, does not use `/model`, and pins the plan's datastore/web
 settings. One start attempt per plan is allowed, including after uncertainty.
 Ctrl-C stops waiting, not server work; wait for the late result, use read-only
-`/research read ID`, or inspect the UI. Reading never imports authorization to start.
+`/research read ID`, or inspect the UI. A successful read clears any pending
+plan/start authorization and its pinned sources, even for the same session.
+Create and review a new plan before starting again.
 Research sessions/results do not replace chat or folder sessions. Active folder
 mode is rejected for generation because research has **no folder isolation**.
 
-Public v1 currently omits research-stage labels. The last text block is displayed
+Public v1 may omit some or all research-stage labels. Without a labelled report,
+the last nonempty unlabelled text block (or last labelled text if none) is displayed
 as an **unverified candidate**, not as a guaranteed report; all content and native
 grounding can be saved as JSON. `/research save` creates a private new file and
 refuses overwrites. Audio is file metadata only. See the
