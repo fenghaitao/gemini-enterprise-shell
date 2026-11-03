@@ -195,7 +195,9 @@ pub struct ResearchResponse {
     pub contents: Vec<ResearchContent>,
     /// Only blocks explicitly marked RESEARCH_REPORT by the service.
     pub report_indices: Vec<usize>,
-    /// Last nonempty text block if stages were omitted. NOT a verified report.
+    /// Only when no labelled report exists: prefer the last nonempty unlabelled
+    /// text block, otherwise the last nonempty text block. Always unverified,
+    /// including when the candidate has an intermediate stage label.
     pub final_text_candidate_index: Option<usize>,
     pub invocation_tools: Vec<String>,
     pub warnings: Vec<String>,
@@ -228,5 +230,6 @@ pub struct UnattributedResearchSegment {
 #[serde(rename_all = "camelCase")]
 pub struct ResearchFile {
     pub file_id: String,
-    pub mime_type: String,
+    /// Optional service-provided MIME type; never inferred from the file ID.
+    pub mime_type: Option<String>,
 }

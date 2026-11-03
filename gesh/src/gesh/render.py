@@ -236,19 +236,20 @@ def render_research(console: Console, response: dict[str, Any]) -> None:
     )
     for i, block in enumerate(response.get("contents") or []):
         if (phase == "plan" or i in report_indices or i == candidate) and block.get("text"):
-            console.print(
-                Text(block.get("kind") or "Unclassified text (stage unverified)", style="dim")
-            )
+            label = block.get("kind") or "Unclassified text (stage unverified)"
+            if i == candidate:
+                label += " (unverified final-text candidate)"
+            console.print(Text(label, style="dim"))
             console.print(Markdown(block["text"]))
             refs = citations(block.get("grounding") or [])
             if refs:
                 console.print(Text(f"Native sources in this block: {len(refs)}", style="dim"))
         if block.get("file"):
             file = block["file"]
+            mime_type = file.get("mimeType") or "MIME type unavailable"
             console.print(
                 Text(
-                    f"File metadata: {file['fileId']} ({file['mimeType']}); "
-                    "no download implemented",
+                    f"File metadata: {file['fileId']} ({mime_type}); no download implemented",
                     style="dim",
                 )
             )

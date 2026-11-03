@@ -447,7 +447,12 @@ fn emit_research(response: &ResearchResponse, json_mode: bool) -> Result<()> {
                     .as_deref()
                     .unwrap_or("unclassified text (stage unverified)");
                 if let Some(text) = &block.text {
-                    writeln!(out, "\n[{i}] {label}\n{text}")?;
+                    let candidate_note = if response.final_text_candidate_index == Some(i) {
+                        " (unverified final-text candidate)"
+                    } else {
+                        ""
+                    };
+                    writeln!(out, "\n[{i}] {label}{candidate_note}\n{text}")?;
                     let refs: usize = block.grounding.iter().map(|g| g.references.len()).sum();
                     writeln!(
                         out,
@@ -459,7 +464,8 @@ fn emit_research(response: &ResearchResponse, json_mode: bool) -> Result<()> {
                 writeln!(
                     out,
                     "File: {} ({}) — metadata only; no download implemented",
-                    file.file_id, file.mime_type
+                    file.file_id,
+                    file.mime_type.as_deref().unwrap_or("MIME type unavailable")
                 )?;
             }
         }

@@ -172,11 +172,20 @@ impl GeminiEnterpriseClient {
             })
             .map(|(i, _)| i)
             .collect();
-        let missing_stages = contents.iter().all(|c| c.kind.is_none());
-        let final_text_candidate_index = if missing_stages {
+        // Stage labels may be present on intermediate Q&A but absent from the
+        // actual final text. Prefer unlabelled text whenever no verified report
+        // exists, regardless of whether other blocks have labels.
+        let final_text_candidate_index = if report_indices.is_empty() {
             contents
                 .iter()
-                .rposition(|c| c.text.as_ref().is_some_and(|t| !t.trim().is_empty()))
+                .rposition(|c| {
+                    c.kind.is_none() && c.text.as_ref().is_some_and(|t| !t.trim().is_empty())
+                })
+                .or_else(|| {
+                    contents
+                        .iter()
+                        .rposition(|c| c.text.as_ref().is_some_and(|t| !t.trim().is_empty()))
+                })
         } else {
             None
         };
@@ -185,8 +194,8 @@ impl GeminiEnterpriseClient {
             .into_iter()
             .filter(|w| !w.starts_with("No native grounding"))
             .collect();
-        if missing_stages {
-            warnings.push("The public API omitted research-stage labels; the last text block is only an unverified final-text candidate, not an attested plan/report. HTTP success alone does not prove agent routing. All visible blocks are preserved.".into());
+        if final_text_candidate_index.is_some() {
+            warnings.push("No nonempty service-labelled RESEARCH_REPORT returned; research-stage labels may be incomplete or absent. The selected text block is only an unverified final-text candidate, not an attested plan/report, even if it has an intermediate stage label. HTTP success alone does not prove agent routing. All visible blocks are preserved.".into());
         }
         if phase != ResearchPhase::Plan && report_indices.is_empty() {
             warnings.push("No explicitly labelled RESEARCH_REPORT returned. Inspect the saved session/research UI before treating this result as a completed report; do not automatically start again.".into());
