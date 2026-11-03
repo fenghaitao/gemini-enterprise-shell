@@ -1,0 +1,1796 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Terminal-first Gemini Enterprise shell with official chat/search and Deep Research APIs, SharePoint folder-scoped answers, and NotebookLM Enterprise support">
+      
+      
+      
+        <link rel="canonical" href="https://fenghaitao.github.io/gemini-enterprise-shell/guides/gemini-enterprise-chat/">
+      
+      
+        <link rel="prev" href="../../rust/getting-started/">
+      
+      
+        <link rel="next" href="../deep-research/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Assistant Guide - Gemini Enterprise Shell Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="brown" data-md-color-accent="yellow">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#gemini-enterprise-chat-official-public-api" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Gemini Enterprise Shell Docs" class="md-header__button md-logo" aria-label="Gemini Enterprise Shell Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 7V5h2V4a2 2 0 0 1 2-2h6v7l2.5-1.5L18 9V2h1c1.05 0 2 .95 2 2v16c0 1.05-.95 2-2 2H7c-1.05 0-2-.95-2-2v-1H3v-2h2v-4H3v-2h2V7zm4 4H5v2h2zm0-4V5H5v2zm0 12v-2H5v2z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Gemini Enterprise Shell Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Assistant Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="brown" data-md-color-accent="yellow"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="brown" data-md-color-accent="yellow"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/fenghaitao/gemini-enterprise-shell" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fenghaitao/gemini-enterprise-shell
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Gemini Enterprise Shell Docs" class="md-nav__button md-logo" aria-label="Gemini Enterprise Shell Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 7V5h2V4a2 2 0 0 1 2-2h6v7l2.5-1.5L18 9V2h1c1.05 0 2 .95 2 2v16c0 1.05-.95 2-2 2H7c-1.05 0-2-.95-2-2v-1H3v-2h2v-4H3v-2h2V7zm4 4H5v2h2zm0-4V5H5v2zm0 12v-2H5v2z"/></svg>
+
+    </a>
+    Gemini Enterprise Shell Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/fenghaitao/gemini-enterprise-shell" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fenghaitao/gemini-enterprise-shell
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Authentication
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    CLI
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            CLI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/notebooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Notebooks
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Sources
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Audio
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/share/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Share
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/doctor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Doctor
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Python SDK
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Source Management
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/notebooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Notebooks
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Audio
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python/error-handling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Rust
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Rust
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rust/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Gemini Enterprise
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Gemini Enterprise
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Assistant Guide
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Assistant Guide
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites-and-resource-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites and resource discovery
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-ask-with-an-explicit-model-and-datastore" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI: ask with an explicit model and datastore
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continue-and-inspect-a-server-conversation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Continue and inspect a server conversation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#answers-limited-to-one-sharepoint-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      Answers limited to one SharePoint folder
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Answers limited to one SharePoint folder">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      End to end
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rust
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#grounding-size-limits-and-failure-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      Grounding, size limits and failure safety
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deep-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deep Research
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool boundaries
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deep-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deep Research
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/gesh/README.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    gesh Shell
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    API
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            API
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Limitations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites-and-resource-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites and resource discovery
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-ask-with-an-explicit-model-and-datastore" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI: ask with an explicit model and datastore
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continue-and-inspect-a-server-conversation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Continue and inspect a server conversation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#answers-limited-to-one-sharepoint-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      Answers limited to one SharePoint folder
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Answers limited to one SharePoint folder">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      End to end
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rust
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#grounding-size-limits-and-failure-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      Grounding, size limits and failure safety
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deep-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deep Research
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool boundaries
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="gemini-enterprise-chat-official-public-api">Gemini Enterprise chat — official public API<a class="headerlink" href="#gemini-enterprise-chat-official-public-api" title="Permanent link">&para;</a></h1>
+<p><code>gemini-chat</code> talks to Gemini Enterprise's <strong>official Discovery Engine v1
+assistant API</strong>. It is independent of NotebookLM: the <code>gemini-chat</code> library crate
+and the <code>gemini-chat</code> command (crate <code>gemini-chat-cli</code>) do not depend on
+<code>nblm-core</code> or <code>nblm</code>. The Python bindings are a separate <code>gemini_chat</code> package (<code>python/gemini-chat</code>,
+built from <code>crates/gemini-chat-python</code>); it does not need <code>nblm</code>.</p>
+<p>Install the command from this checkout with <code>make install-chat</code>
+(<code>cargo install --path crates/gemini-chat-cli</code>).</p>
+<h2 id="prerequisites-and-resource-discovery">Prerequisites and resource discovery<a class="headerlink" href="#prerequisites-and-resource-discovery" title="Permanent link">&para;</a></h2>
+<ul>
+<li>An existing Gemini Enterprise app/engine and a licensed/authorized account.</li>
+<li>OAuth credentials with a supported scope, such as <code>cloud-platform</code> (<code>gcloud
+  auth login</code>, or an access token in <code>GEMINI_CHAT_ACCESS_TOKEN</code> with <code>--auth env</code>).</li>
+<li>Invocation permission <code>discoveryengine.assistants.assist</code>. Reading saved
+  sessions also needs the applicable session-read permission. Broad admin access
+  is <strong>not</strong> required merely to invoke an already known assistant.</li>
+<li>The real project number, location, engine ID, and relevant datastore IDs.
+  The web portal's CID UUID is <strong>not necessarily the engine ID</strong>. Use known
+  deployment configuration, your administrator, or authorized resource discovery;
+  never guess based on a portal UUID.</li>
+</ul>
+<p>The client sends <code>x-goog-user-project</code> with the configured project number, uses
+TLS verification, and never needs browser cookies. It does not enable APIs,
+change IAM, authorize connectors, or change billing configuration.</p>
+<p>Behind an HTTPS-inspecting proxy, add the proxy's CA: the client reads a PEM bundle
+from <code>GEMINI_CHAT_CA_BUNDLE</code>, then <code>SSL_CERT_FILE</code>, then <code>REQUESTS_CA_BUNDLE</code> (first
+nonempty wins; a bad selected bundle fails closed). Built-in roots stay trusted.
+Through the Python SDK, the same variables apply.</p>
+<p><code>--location</code> must be <code>global</code>, <code>us</code> or <code>eu</code>, and must be the <strong>engine's own
+location</strong>: it is part of every resource path, so an engine created in <code>us</code> is not
+found under <code>global</code> (HTTP 404). The endpoint follows the location: <code>global</code> uses
+<code>https://discoveryengine.googleapis.com/v1/</code>; <code>us</code> and <code>eu</code> use
+<code>https://us-discoveryengine.googleapis.com/v1/</code> and
+<code>https://eu-discoveryengine.googleapis.com/v1/</code>. A hidden <code>--base-url</code>
+(<code>GEMINI_CHAT_BASE_URL</code>) is a test/proxy override and must include <code>/v1</code> (local
+HTTP only for tests).</p>
+<h2 id="cli-ask-with-an-explicit-model-and-datastore">CLI: ask with an explicit model and datastore<a class="headerlink" href="#cli-ask-with-an-explicit-model-and-datastore" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_PROJECT_NUMBER</span><span class="o">=</span>YOUR_PROJECT_NUMBER
+<span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_LOCATION</span><span class="o">=</span>us
+<span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_ENGINE_ID</span><span class="o">=</span>YOUR_ENGINE_ID
+
+gcloud<span class="w"> </span>auth<span class="w"> </span>login
+
+gemini-chat<span class="w"> </span>--json<span class="w"> </span>ask<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model<span class="w"> </span>gemini-4-argon<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--data-store-id<span class="w"> </span>YOUR_SHAREPOINT_FILE_DATASTORE_ID<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">&#39;Find the relevant HWRS document and answer with native source citations.&#39;</span>
+</code></pre></div>
+<p>Alternatively pass <code>--project-number</code>, <code>--location</code> and <code>--engine-id</code>.
+<code>--data-store-id</code> is repeatable and accepts short IDs or full datastore resources
+in the configured project/location/collection. With none supplied, engine defaults
+apply; this is <strong>not</strong> SharePoint-only or notebook-only grounding.</p>
+<p>Optional configuration:</p>
+<table>
+<thead>
+<tr>
+<th>Flag/environment</th>
+<th>Default/meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--project-number</code> / <code>GEMINI_CHAT_PROJECT_NUMBER</code></td>
+<td>Required project <strong>number</strong></td>
+</tr>
+<tr>
+<td><code>--location</code> / <code>GEMINI_CHAT_LOCATION</code></td>
+<td><code>global</code> (default), <code>us</code> or <code>eu</code>; must match the engine</td>
+</tr>
+<tr>
+<td><code>--engine-id</code> / <code>GEMINI_CHAT_ENGINE_ID</code></td>
+<td>Required real engine ID</td>
+</tr>
+<tr>
+<td><code>--assistant-id</code> / <code>GEMINI_CHAT_ASSISTANT_ID</code></td>
+<td><code>default_assistant</code></td>
+</tr>
+<tr>
+<td><code>--collection-id</code> / <code>GEMINI_CHAT_COLLECTION_ID</code></td>
+<td><code>default_collection</code></td>
+</tr>
+<tr>
+<td><code>ask --model</code> / <code>GEMINI_CHAT_MODEL</code></td>
+<td>Omit for assistant default</td>
+</tr>
+<tr>
+<td><code>ask --session-id</code></td>
+<td>Continue a saved session; otherwise start a new one</td>
+</tr>
+<tr>
+<td><code>ask --data-store-id</code></td>
+<td>Repeatable datastore selection</td>
+</tr>
+<tr>
+<td><code>ask --web-grounding</code></td>
+<td>Explicit public-web grounding opt-in; needs assistant support</td>
+</tr>
+<tr>
+<td><code>--timeout 6m</code></td>
+<td>Default 360 seconds</td>
+</tr>
+<tr>
+<td><code>--auth env</code> / <code>GEMINI_CHAT_AUTH</code></td>
+<td>Use <code>GEMINI_CHAT_ACCESS_TOKEN</code> instead of gcloud</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>JSON output</td>
+</tr>
+</tbody>
+</table>
+<p>An explicit model is sent as <code>generationSpec.modelId</code>; no fallback model is
+substituted on error. IDs are tenant/service-dependent. <code>gemini-4-argon</code> was
+observed in a real tenant's model configuration and accepted live on 2026-10-30;
+availability in other tenants is not guaranteed. Human UI names are not sufficient
+to infer an API model ID.</p>
+<h2 id="continue-and-inspect-a-server-conversation">Continue and inspect a server conversation<a class="headerlink" href="#continue-and-inspect-a-server-conversation" title="Permanent link">&para;</a></h2>
+<p>Copy the returned <strong>full <code>session</code> resource</strong>, or its last ID segment:</p>
+<div class="highlight"><pre><span></span><code>gemini-chat<span class="w"> </span>--json<span class="w"> </span>ask<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model<span class="w"> </span>gemini-4-argon<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--session-id<span class="w"> </span>YOUR_SESSION_ID<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--data-store-id<span class="w"> </span>YOUR_SHAREPOINT_FILE_DATASTORE_ID<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">&#39;Explain the second point in your previous answer.&#39;</span>
+
+<span class="c1"># Read-only; does not generate another answer.</span>
+gemini-chat<span class="w"> </span>--json<span class="w"> </span>session<span class="w"> </span>--session-id<span class="w"> </span>YOUR_SESSION_ID
+gemini-chat<span class="w"> </span>--json<span class="w"> </span>session<span class="w"> </span>--session-id<span class="w"> </span>YOUR_SESSION_ID<span class="w"> </span>--include-answer-details
+</code></pre></div>
+<p>Re-send the intended model/datastore options on each turn. The server session
+provides prior conversational context; it is not a guarantee of current tool
+selection or folder isolation. Stored turns' <code>queryConfig</code> may report
+<code>google.discoveryengine.googleapis.com.Assistant.model_id</code>. This is a
+service-reported persisted selection, unlike the response's <code>requested_model</code>.</p>
+<p>Cross-UI visibility and continuity with Google's browser chat are <strong>not</strong>
+verified; returning a server session is not proof of that.</p>
+<h2 id="answers-limited-to-one-sharepoint-folder">Answers limited to one SharePoint folder<a class="headerlink" href="#answers-limited-to-one-sharepoint-folder" title="Permanent link">&para;</a></h2>
+<p><code>ask</code> (streamAssist) cannot be restricted to a folder: a folder named in the question
+only steers retrieval, and the assistant may search elsewhere or answer from memory.
+For a server-enforced scope, use the two-step commands instead.</p>
+<h3 id="end-to-end">End to end<a class="headerlink" href="#end-to-end" title="Permanent link">&para;</a></h3>
+<p><strong>1. Log in and configure</strong> (once per shell; the login expires on the organization's
+reauthentication schedule, and the tools then report "run <code>gcloud auth login</code>"):</p>
+<div class="highlight"><pre><span></span><code>gcloud<span class="w"> </span>auth<span class="w"> </span>login<span class="w">                       </span><span class="c1"># in the browser profile of your work account</span>
+make<span class="w"> </span>install-chat<span class="w">                       </span><span class="c1"># or: cargo install --path crates/gemini-chat-cli</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_PROJECT_NUMBER</span><span class="o">=</span>YOUR_PROJECT_NUMBER
+<span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_LOCATION</span><span class="o">=</span>us<span class="w">           </span><span class="c1"># the engine&#39;s own location: global, us or eu</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_CHAT_ENGINE_ID</span><span class="o">=</span>YOUR_ENGINE_ID
+<span class="c1"># Behind a TLS-inspecting proxy: export GEMINI_CHAT_CA_BUNDLE=/path/to/ca-bundle.pem</span>
+</code></pre></div>
+<p><strong>2. Find the SharePoint file datastore ID.</strong> Reading the engine works even without
+permission to list engines or datastores; it returns the attached datastore IDs. The
+SharePoint connector has one per entity type; use the one ending in <code>_file</code>:</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="k">$(</span>gcloud<span class="w"> </span>auth<span class="w"> </span>print-access-token<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;x-goog-user-project: </span><span class="nv">$GEMINI_CHAT_PROJECT_NUMBER</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;https://</span><span class="nv">$GEMINI_CHAT_LOCATION</span><span class="s2">-discoveryengine.googleapis.com/v1/projects/</span><span class="nv">$GEMINI_CHAT_PROJECT_NUMBER</span><span class="s2">/locations/</span><span class="nv">$GEMINI_CHAT_LOCATION</span><span class="s2">/collections/default_collection/engines/</span><span class="nv">$GEMINI_CHAT_ENGINE_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;import json,sys; print(&quot;\n&quot;.join(json.load(sys.stdin)[&quot;dataStoreIds&quot;]))&#39;</span>
+<span class="c1"># e.g. sharepoint_connector_ab12cd_file   &lt;- use this one</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DS</span><span class="o">=</span>sharepoint_connector_ab12cd_file
+</code></pre></div>
+<p>(For <code>global</code>, the host is <code>discoveryengine.googleapis.com</code> without a prefix.)</p>
+<p><strong>3. Copy the folder URL</strong> from the browser address bar while viewing the folder in
+SharePoint, for example
+<code>https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs</code>. Library views
+(<code>…/Forms/AllItems.aspx?id=…</code>) also work; sharing links (<code>…/:f:/…</code>) do not.</p>
+<p><strong>4. Search and answer from the CLI:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nv">F</span><span class="o">=</span><span class="s1">&#39;https://example.sharepoint.com/sites/eng/Shared Documents/Team/Specs&#39;</span>
+
+<span class="c1"># a) Which files match? (no generation; every word must match, so use keywords)</span>
+gemini-chat<span class="w"> </span>search<span class="w"> </span>--sharepoint-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$F</span><span class="s2">&quot;</span><span class="w"> </span>--data-store-id<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DS</span><span class="s2">&quot;</span><span class="w"> </span>sync<span class="w"> </span>handshake
+
+<span class="c1"># b) Answer only from the matching files in that folder (one generation).</span>
+<span class="c1">#    Prints the answer, `Session: …`, the files used and the references.</span>
+gemini-chat<span class="w"> </span>answer<span class="w"> </span>--sharepoint-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$F</span><span class="s2">&quot;</span><span class="w"> </span>--data-store-id<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DS</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--search-terms<span class="w"> </span><span class="s1">&#39;sync handshake&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">&#39;In two sentences, what does the spec say the handshake does?&#39;</span>
+
+<span class="c1"># c) Read the server session back (no generation).</span>
+gemini-chat<span class="w"> </span>session<span class="w"> </span>--session-id<span class="w"> </span>SESSION_ID
+</code></pre></div>
+<p>Add <code>--json</code> to any command for machine-readable output. Folder-answer continuation
+is intentionally <strong>not</strong> exposed by the one-shot CLI: a fresh process cannot prove how
+an arbitrary server session was originally scoped. For strict multi-turn folder chat,
+use one long-lived Python <code>GeminiEnterpriseClient</code> instance
+(<code>.answer_in_folder(..., session_id=...)</code>) or gesh (<code>/folder</code>, <code>/terms</code>, then plain
+questions). Both keep trusted session-to-folder provenance in the client process.</p>
+<p>What to check in the output: <code>References</code> (every one is inside the folder and was
+supplied in that turn, or the command fails) and the warnings: "more files may match"
+(narrow the keywords or raise <code>--page-size</code>) and "N of M files were sent as short
+snippets only" (only about 5 files arrive with full text).</p>
+<p>How it works:</p>
+<ol>
+<li><strong>Search</strong> sends <code>(&lt;search terms&gt;) path:"&lt;folder&gt;"</code>. With a federated SharePoint
+   datastore, SharePoint evaluates <code>path:</code> itself: recursive, with your own SharePoint
+   permissions. Spell correction is suggestion-only, because automatic correction
+   rewrites the folder URL.</li>
+<li><strong>Answer</strong> receives only those files (<code>searchSpec.searchResultList</code>), so no other
+   server-side search runs; its citations can only point at supplied files. Folder-scoped
+   Search/Answer require exactly <strong>one</strong> datastore, preventing the query from being fanned
+   out to unrelated connectors before local URL checks run.</li>
+<li>Every search result and every answer reference is re-checked locally against the
+   folder (host, then path, case-insensitive, ignoring <code>?web=1</code>). Anything outside
+   fails the call instead of being dropped silently.</li>
+<li>Each answer reference must also be one of the files sent <strong>in this turn</strong> (same
+   document resource, or the same normalized URL when the reference has no resource).
+   A citation of any other file, even one inside the folder, fails the call.</li>
+</ol>
+<p>The contract per turn: retrieval and references are limited to this turn's search
+results. For multi-turn use, the client records the session's normalized folder and
+datastore when it creates the session. A continuation is accepted only by that same
+client instance and only for the same folder and datastore. This request provenance,
+not the presence of citations, is the trust boundary, so a successful scoped answer
+with zero structured references can still be continued safely.</p>
+<p>Folder URLs: paste the browser address of the folder, with or without a trailing slash,
+with literal or <code>%20</code> spaces, or the library view (<code>…/Forms/AllItems.aspx?id=/sites/…</code>).
+Sharing links (<code>…/:f:/…</code>) cannot be resolved locally and are rejected. Search terms must
+not contain <code>path:</code> and must have balanced quotes and parentheses.</p>
+<p>Limits:</p>
+<ul>
+<li>Keywords, not a sentence: with a folder restriction SharePoint requires every word to
+  match, which is why <code>answer</code> takes <code>--search-terms</code> separately from the question.</li>
+<li>At most 100 files per search (<code>--page-size</code>, default 10), with no further pages; a
+  warning says when the limit was reached.</li>
+<li>Search returns full text for only about the top 5 files; the rest are sent as short
+  snippets, and a warning reports how many.</li>
+<li>Sessions: the first folder <code>answer</code> creates a server session. The service does
+  <strong>not</strong> persist an attested folder scope on that session, so saved-session readback is
+  not used as proof. The client instead binds sessions it creates to the normalized
+  folder and datastore in memory; clones share that registry. The registry holds up to
+  1024 folder sessions and evicts the oldest-created first (continuing a session does not
+  refresh it); an evicted session fails closed like one from a fresh client. A continuation from a fresh client/process, a different
+  folder, or a different datastore is rejected before network I/O. Each accepted turn
+  then runs its own folder-scoped search and sends only
+  those files. Give each follow-up its own search terms (shorthand questions like
+  "which die?" make poor keywords). Server readback remains available with
+  <code>gemini-chat session</code>, but is informational rather than an isolation proof.</li>
+<li><code>answer</code> has no <code>--model</code> option. A question the Answer API declines (for example
+  small talk) is reported as skipped; if no file matches, the Answer API is not called
+  at all.</li>
+<li>This relies on the SharePoint connector being in <strong>federated</strong> (live search) mode. It
+  needs the <code>discoveryengine.servingConfigs.search</code> and <code>.answer</code> permissions.</li>
+<li>The strongest alternative is admin-side: a dedicated SharePoint connector whose Path
+  filter is the folder. Then plain <code>--data-store-id</code> is scoped on every call, including <code>ask</code>.</li>
+</ul>
+<p>In Rust: <code>GeminiEnterpriseClient::search(SearchRequest)</code> and
+<code>GeminiEnterpriseClient::answer_in_folder(FolderAnswerRequest)</code> with a
+<code>SharePointFolder::parse(url)</code>.</p>
+<h2 id="rust">Rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h2>
+<p>Crate <code>gemini-chat</code> (path <code>crates/gemini-chat</code>), no NotebookLM dependency:</p>
+<div class="highlight"><pre><span></span><code><span class="k">use</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">sync</span><span class="p">::</span><span class="n">Arc</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">gemini_chat</span><span class="p">::{</span><span class="n">AssistRequest</span><span class="p">,</span><span class="w"> </span><span class="n">GcloudTokenProvider</span><span class="p">,</span>
+<span class="w">    </span><span class="n">GeminiEnterpriseClient</span><span class="p">,</span><span class="w"> </span><span class="n">GeminiEnterpriseConfig</span><span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GeminiEnterpriseClient</span><span class="p">::</span><span class="n">new</span><span class="p">(</span>
+<span class="w">    </span><span class="n">Arc</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">GcloudTokenProvider</span><span class="p">::</span><span class="n">default</span><span class="p">()),</span>
+<span class="w">    </span><span class="n">GeminiEnterpriseConfig</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="s">&quot;123456789012&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;us&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;your-engine-id&quot;</span><span class="p">),</span>
+<span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">request</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AssistRequest</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="s">&quot;Find the relevant source and cite it.&quot;</span><span class="p">);</span>
+<span class="n">request</span><span class="p">.</span><span class="n">model_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="s">&quot;gemini-4-argon&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">());</span>
+<span class="n">request</span><span class="p">.</span><span class="n">data_stores</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="fm">vec!</span><span class="p">[</span><span class="s">&quot;your-sharepoint-file-datastore&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()];</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="n">ask</span><span class="p">(</span><span class="n">request</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">session</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="n">get_session</span><span class="p">(</span><span class="o">&amp;</span><span class="n">result</span><span class="p">.</span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+<h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
+<p>Build it from <code>python/gemini-chat</code> with <code>uv run --extra dev maturin develop</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">gemini_chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">GeminiEnterpriseClient</span><span class="p">,</span> <span class="n">GcloudTokenProvider</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">GeminiEnterpriseClient</span><span class="p">(</span>
+    <span class="n">GcloudTokenProvider</span><span class="p">(),</span>
+    <span class="n">project_number</span><span class="o">=</span><span class="s2">&quot;123456789012&quot;</span><span class="p">,</span>
+    <span class="n">engine_id</span><span class="o">=</span><span class="s2">&quot;your-engine-id&quot;</span><span class="p">,</span>
+    <span class="n">location</span><span class="o">=</span><span class="s2">&quot;us&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">answer</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span>
+    <span class="s2">&quot;Find the relevant source and cite it.&quot;</span><span class="p">,</span>
+    <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;gemini-4-argon&quot;</span><span class="p">,</span>
+    <span class="n">data_store_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;your-sharepoint-file-datastore&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">answer</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">session</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">grounding</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">warnings</span><span class="p">)</span>
+
+<span class="n">saved</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_session</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">session</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">turn</span> <span class="ow">in</span> <span class="n">saved</span><span class="p">[</span><span class="s2">&quot;turns&quot;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">turn</span><span class="p">[</span><span class="s2">&quot;queryConfig&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="s2">&quot;google.discoveryengine.googleapis.com.Assistant.model_id&quot;</span>
+    <span class="p">))</span>
+<span class="c1"># A deliberate new turn, not an automatic retry:</span>
+<span class="c1"># client.ask(&quot;Follow-up&quot;, session_id=answer.session,</span>
+<span class="c1">#            model_id=&quot;gemini-4-argon&quot;, data_store_ids=[...])</span>
+</code></pre></div>
+<p><code>GeminiAssistResponse</code> exposes <code>answer</code>, <code>session</code>, <code>answer_resource</code>,
+<code>requested_model</code>, <code>grounding</code>, <code>native_reference_count</code>, <code>invocation_tools</code>,
+<code>warnings</code>, and <code>to_dict()</code>. <code>get_session()</code> returns a dictionary matching the public session
+shape. No network request happens during client construction.</p>
+<h2 id="grounding-size-limits-and-failure-safety">Grounding, size limits and failure safety<a class="headerlink" href="#grounding-size-limits-and-failure-safety" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>grounding</code> contains only native <code>textGroundingMetadata</code>, preserving each batch's
+  own reference indices, segments, extracts, and document metadata. Different
+  source URIs may share a generic connector document resource; do not identify
+  documents solely by that resource suffix.</li>
+<li>A model-written “Native Citation” label does <strong>not</strong> create native references.
+  Zero native references produce an explicit warning. That warning does not mean
+  the quotation is false or that retrieval was not performed; the trace is absent.</li>
+<li>Source quotations still need independent verification. In initial live testing,
+  default-model answers had native references but some non-verbatim quotations;
+  the explicitly selected Argon answer had a matching quotation but no native
+  references or tool-call names. Model choice alone does not ensure citation quality.</li>
+<li>Datastore selection is a server request field. Folder/file scope expressed only
+  in the prompt is <strong>not</strong> a verified isolation boundary or complete coverage check.</li>
+<li>Responses are buffered, at most <strong>16 MiB / 10,000 frames</strong>, and must reach EOF
+  with a named terminal <code>SUCCEEDED</code> answer. Partial, malformed, failed, skipped,
+  cancelled, empty-text, or connector-auth-error responses are not returned as
+  successful textual answers. Native segment reference indices/UTF-8 offsets are
+  checked, without claiming semantic validation of citations.</li>
+<li>There are <strong>no automatic generation retries</strong>, including on 401, 429, server
+  errors, broken streams or timeouts; redirects and transport-level retries are
+  disabled too. An ambiguous failure may have recorded the turn. Inspect the
+  session before any manual retry; never retry the question just to recover a
+  missing response. There is no Google idempotency key or durable local replay
+  guard in the client. Batch scripts should maintain their own exclusive attempt
+  records.</li>
+<li>No prompt, response body, thoughts, token, or cookie is logged by this client. JSON results and stored session details are sensitive
+  content: keep them private and out of version control. Python post-dispatch
+  <code>GeminiChatError</code> exposes <code>session</code> (when known) and <code>do_not_retry=True</code>.</li>
+</ul>
+<h2 id="deep-research">Deep Research<a class="headerlink" href="#deep-research" title="Permanent link">&para;</a></h2>
+<p>The built-in <code>deep_research</code> agent is supported via explicit <code>research plan</code> and
+<code>research start</code> commands, plus Rust/Python SDK methods and gesh. See the
+<a href="../deep-research/">Deep Research guide</a> for the two-step workflow, research-specific
+30-minute deadline, live-validated protocol, and public API stage-label limitation.
+It does not inherit folder isolation and does not accept a model override.</p>
+<h2 id="tool-boundaries">Tool boundaries<a class="headerlink" href="#tool-boundaries" title="Permanent link">&para;</a></h2>
+<p>This version exposes enterprise search, optional web grounding, and the built-in
+Deep Research workflow, <strong>not mutative connector actions, arbitrary shell/Python
+function calls, arbitrary agents/workflows or general media generation</strong>. Research
+may return audio-summary file metadata; no download is implemented. The wider public API also defines other managed tool
+specifications and calls to certain registered agents, but these were not added
+just because the schema mentions them.</p>
+<p>Google's current StreamAssist guide explicitly says programmatic mutative tools
+(email drafting, calendar event creation, chat messaging, etc.) are unsupported
+and may silently fail or loop. Registered A2A/ADK agents are not supported through
+this endpoint. For custom function-calling, use a separately supported API/agent
+integration with appropriate authorization; a Gemini Enterprise license does not
+establish access/billing/availability for another API.</p>
+<p>References:</p>
+<ul>
+<li><a href="https://docs.cloud.google.com/gemini/enterprise/docs/reference/rest/v1/projects.locations.collections.engines.assistants/streamAssist">StreamAssist reference</a></li>
+<li><a href="https://docs.cloud.google.com/gemini/enterprise/docs/invoke-agent-streamassist">Official invocation guide and limitations</a></li>
+<li><a href="https://discoveryengine.googleapis.com/$discovery/rest?version=v1">Discovery schema</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "content.code.copy", "navigation.expand"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
