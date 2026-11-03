@@ -4,10 +4,10 @@
 
   # _gemini-enterprise-shell_
 
-  **Terminal-first Gemini Enterprise chat + NotebookLM Enterprise toolkit**
+  **Terminal-first Gemini Enterprise chat, Deep Research, and NotebookLM Enterprise toolkit**
 
-  💬 **gesh**: Interactive Gemini Enterprise shell with chat, citations, SharePoint folder scope, and notebook commands <br/>
-  🔌 **gemini-chat**: Official Discovery Engine v1 assistant client for Rust, CLI, and Python <br/>
+  💬 **gesh**: Interactive Gemini Enterprise shell with chat, Deep Research, citations, SharePoint folder scope, and notebook commands <br/>
+  🔌 **gemini-chat**: Official Discovery Engine v1 chat, Deep Research, and search client for Rust, CLI, and Python <br/>
   📚 **nblm**: NotebookLM Enterprise CLI + Python SDK retained from the nblm-rs foundation
 
   <sub>NotebookLM foundation package badges:</sub><br/>
@@ -32,7 +32,7 @@
 
 > [!IMPORTANT]
 > This repository combines two independent Google enterprise surfaces:
-> **Gemini Enterprise assistant/search** through the official Discovery Engine v1 APIs,
+> **Gemini Enterprise assistant/search and Deep Research** through the official Discovery Engine v1 APIs,
 > and **NotebookLM Enterprise** through the retained `nblm` client stack.
 > The NotebookLM code remains an important foundation of the project; the newer
 > Gemini Enterprise client and `gesh` shell are built alongside it, not as replacements.
@@ -42,8 +42,8 @@
 
 | Surface | What it is | Highlights |
 | --- | --- | --- |
-| **`gesh`** | Interactive terminal shell | Gemini Enterprise chat, Markdown answers, native references, server sessions, SharePoint folder-scoped Q&A, and NotebookLM commands in one shell |
-| **`gemini-chat`** | Independent Rust/CLI/Python client | Official Discovery Engine v1 `streamAssist`, session readback, datastore selection, structured grounding, web grounding, Search/Answer, and fail-closed SharePoint folder scope |
+| **`gesh`** | Interactive terminal shell | Gemini Enterprise chat, explicit plan→review→start Deep Research, Markdown answers, native references, server sessions, SharePoint folder-scoped Q&A, and NotebookLM commands in one shell |
+| **`gemini-chat`** | Independent Rust/CLI/Python client | Official Discovery Engine v1 `streamAssist`, Deep Research planning/start/readback, session readback, datastore selection, structured grounding, web grounding, Search/Answer, and fail-closed SharePoint folder scope |
 | **`nblm`** | NotebookLM Enterprise foundation | Original Rust CLI and Python SDK for notebooks, sources, audio overviews, sharing, and automation |
 
 The APIs are deliberately kept separate internally. The Gemini Enterprise chat client
@@ -73,6 +73,26 @@ Then chat normally:
 gesh[new]> Find the relevant design document and summarize the decision.
 gesh[16059694688619672760]> What evidence supports that?
 ```
+
+For **Deep Research**, first create a plan in an enabled/allowlisted Gemini
+Enterprise app:
+
+```text
+gesh[new]> /research plan Compare Rust and Python for a CLI API client.
+```
+
+Review the returned plan, then explicitly start research and save the result:
+
+```text
+gesh[new]> /research start
+gesh[new]> /research save research.json
+```
+
+Research uses a separate session and a 30-minute request timeout, with no automatic
+generation retries. It does **not** enforce SharePoint folder/file isolation.
+See the [Deep Research guide](docs/guides/deep-research.md) for CLI and SDK examples,
+read-only recovery, and result-verification limitations. Keep saved reports private
+and out of Git.
 
 For a stronger SharePoint folder boundary, use folder mode. Retrieval is constrained to
 one explicit SharePoint datastore and every returned file/reference is checked locally:
@@ -174,7 +194,7 @@ installed (`cargo install cargo-make`), run from the repository root:
 make                         # Build the release CLI
 make install                 # Install/update the nblm command from this checkout
 make install-chat            # Install/update the gemini-chat command
-make gesh                    # Interactive shell for chat + notebooks (gesh/, needs uv)
+make gesh                    # Interactive shell for chat + research + notebooks (gesh/, needs uv)
 make run ARGS="--help"        # Run from source, rebuilding changes automatically
 make help                    # List available targets
 ```
