@@ -70,6 +70,7 @@ nav:
       - Getting Started: rust/getting-started.md
   - Gemini Enterprise:
       - Assistant Guide: guides/gemini-enterprise-chat.md
+      - Deep Research: guides/deep-research.md
       - gesh Shell: https://github.com/fenghaitao/gemini-enterprise-shell/blob/main/gesh/README.md
   - Guides:
       - Troubleshooting: guides/troubleshooting.md

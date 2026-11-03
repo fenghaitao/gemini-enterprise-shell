@@ -58,3 +58,22 @@ uv run --extra dev pytest
 ```
 
 See `docs/guides/gemini-enterprise-chat.md` in the repository for details.
+
+
+## Deep Research
+
+The same client exposes `plan_research(topic, *, data_store_ids=None,
+web_grounding=False)` and `start_research(session_id, *, data_store_ids=None,
+web_grounding=False)`, returning dictionaries. Review the plan before explicitly
+starting; keep identical source settings. Research uses a separate
+`research_timeout_secs=1800` constructor option (chat stays at 360 seconds).
+No model override or automatic generation retry is performed.
+`get_research(session_id)` recovers the latest saved result without generating.
+
+Results preserve ordered `contents` with per-block grounding and optional audio
+file metadata. `report_indices` contains only service-labelled reports; when
+public v1 omits stages, `final_text_candidate_index` is unverified and warnings
+explain the limitation. Native `-1` reference markers are quarantined in
+`unattributed_segments`, not treated as valid citations. Datastore selection is
+not folder isolation. See the
+[full guide](../../docs/guides/deep-research.md) for examples and recovery safety.

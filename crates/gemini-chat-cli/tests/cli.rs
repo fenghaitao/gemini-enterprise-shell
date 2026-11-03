@@ -425,3 +425,102 @@ async fn session_summary_labels_folder_answer_turns() {
         ))
         .stdout(predicate::str::contains("Turn 2: folder answer | folder q"));
 }
+
+#[tokio::test]
+async fn research_plan_and_start_explicit_lifecycle_without_model_env_leak() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response(false)))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let output = command(&server)
+        .env("GEMINI_CHAT_MODEL", "must-not-be-sent")
+        .args([
+            "research",
+            "plan",
+            "--data-store-id",
+            "sp_file",
+            "--json",
+            "Plan only",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let plan: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(plan["requested_phase"], "plan");
+    assert_eq!(plan["requested_agent"], "deep_research");
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    command(&server)
+        .args([
+            "research",
+            "start",
+            "--session-id",
+            "456",
+            "--data-store-id",
+            "sp_file",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("stage unverified"))
+        .stderr(predicate::str::contains(
+            "No explicitly labelled RESEARCH_REPORT",
+        ));
+    let requests = server.received_requests().await.unwrap();
+    let first: Value = serde_json::from_slice(&requests[0].body).unwrap();
+    let second: Value = serde_json::from_slice(&requests[1].body).unwrap();
+    assert_eq!(
+        first["agentsSpec"],
+        json!({"agentSpecs":[{"agentId":"deep_research"}]})
+    );
+    assert!(first.get("generationSpec").is_none());
+    assert_eq!(second["query"]["text"], "Start Research");
+    assert_eq!(second["session"], format!("{ENGINE}/sessions/456"));
+}
+
+#[tokio::test]
+async fn research_missing_session_invalid_flags_and_failed_start_do_not_generate_extra_turns() {
+    let server = MockServer::start().await;
+    for args in [
+        vec!["research", "start"],
+        vec!["research", "plan", "--model", "x", "topic"],
+        vec!["research", "start", "--session-id", "../id"],
+    ] {
+        command(&server).args(args).assert().failure();
+    }
+    assert!(server.received_requests().await.unwrap().is_empty());
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+    command(&server)
+        .args(["research", "start", "--session-id", "456"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("do not automatically repeat"));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn research_read_recovers_without_sending_a_generation() {
+    let server = MockServer::start().await;
+    let answer = response(false)[0]["answer"].clone();
+    Mock::given(method("GET")).and(path(format!("/v1/{ENGINE}/sessions/456")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"name":format!("{ENGINE}/sessions/456"),"turns":[{"detailedAssistAnswer":answer}]})))
+        .expect(1).mount(&server).await;
+    let output = command(&server)
+        .args(["research", "read", "--session-id", "456", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(value["requested_phase"], "read");
+    assert!(value["requested_agent"].is_null());
+    assert_eq!(value["contents"][0]["text"], "Answer");
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
