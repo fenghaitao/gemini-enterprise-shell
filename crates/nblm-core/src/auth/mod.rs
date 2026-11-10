@@ -152,7 +152,7 @@ impl TokenProvider for GcloudTokenProvider {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::TokenProvider(format!(
-                "Failed to get access token from gcloud. Please run 'gcloud auth login' to authenticate.\nError: {}",
+                "Failed to get access token from gcloud. Please run 'gcloud auth login' to authenticate.\nIf browser login gets stuck, run 'gcloud auth login --force --no-launch-browser'. Open the printed URL, sign in, and paste the authorization code back into that terminal.\nError: {}",
                 stderr.trim()
             )));
         }

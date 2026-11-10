@@ -15,6 +15,10 @@ pub async fn run(cmd: AuthCommand) -> Result<()> {
 async fn login(args: crate::args::LoginArgs) -> Result<()> {
     println!("{}", "Starting Google Cloud authentication...".cyan());
     println!("This will open your browser to authenticate with Google.");
+    println!(
+        "If browser login gets stuck, cancel with Ctrl-C and run 'gcloud auth login --force --no-launch-browser{}'. Open the printed URL, sign in, and paste the authorization code back into that terminal.",
+        if args.drive_access { " --enable-gdrive-access" } else { "" }
+    );
 
     let mut command = build_login_command(&args);
 
@@ -54,6 +58,7 @@ async fn status() -> Result<()> {
     if !output.status.success() {
         println!("{}", "Not authenticated.".yellow());
         println!("Run '{}' to log in.", "nblm auth login".bold());
+        println!("If browser login gets stuck, run 'gcloud auth login --force --no-launch-browser'. Open the printed URL, sign in, and paste the authorization code back into that terminal.");
         anyhow::bail!("Not authenticated");
     }
 
