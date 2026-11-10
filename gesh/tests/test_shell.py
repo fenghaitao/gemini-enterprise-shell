@@ -7,16 +7,67 @@ import stat
 import threading
 from dataclasses import dataclass, field
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from rich.console import Console
 
-from gesh.cli import _prompt_history, build_config, main, parse_args
+from gesh.cli import _prompt_history, build_config, build_shell, main, parse_args
 from gesh.config import Config
 from gesh.render import citations, clean_snippet, render_research
 from gesh.shell import Shell, _Abandoned
 
 ENGINE = "projects/1/locations/us/collections/default_collection/engines/eng"
+
+
+@pytest.mark.parametrize(
+    "resolved", [r"C:\Cloud SDK\bin\gcloud.CMD", "/opt/google/bin/gcloud", None]
+)
+def test_build_shell_resolves_gcloud_for_both_sdks(
+    monkeypatch: pytest.MonkeyPatch, resolved: str | None
+) -> None:
+    import gemini_chat
+    import nblm
+
+    lookup = Mock(return_value=resolved)
+    monkeypatch.setattr("gesh.cli.shutil.which", lookup)
+    chat_tokens = Mock()
+    notebook_tokens = Mock()
+    monkeypatch.setattr(gemini_chat, "GcloudTokenProvider", chat_tokens)
+    monkeypatch.setattr(nblm, "GcloudTokenProvider", notebook_tokens)
+    monkeypatch.setattr(gemini_chat, "GeminiEnterpriseClient", Mock())
+    monkeypatch.setattr(nblm, "NblmClient", Mock())
+
+    shell = build_shell(Config(project_number="1", engine_id="eng"), Console(file=io.StringIO()))
+    shell.chat()
+    shell.notebooks()
+
+    lookup.assert_called_once_with("gcloud")
+    chat_tokens.assert_called_once_with(binary=resolved or "gcloud")
+    notebook_tokens.assert_called_once_with(binary=resolved or "gcloud")
+
+
+def test_build_shell_env_auth_does_not_resolve_gcloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    import gemini_chat
+    import nblm
+
+    lookup = Mock(side_effect=AssertionError("env auth must not look up gcloud"))
+    monkeypatch.setattr("gesh.cli.shutil.which", lookup)
+    chat_tokens = Mock()
+    notebook_tokens = Mock()
+    monkeypatch.setattr(gemini_chat, "EnvTokenProvider", chat_tokens)
+    monkeypatch.setattr(nblm, "EnvTokenProvider", notebook_tokens)
+    monkeypatch.setattr(gemini_chat, "GeminiEnterpriseClient", Mock())
+    monkeypatch.setattr(nblm, "NblmClient", Mock())
+
+    shell = build_shell(
+        Config(project_number="1", engine_id="eng", auth="env"), Console(file=io.StringIO())
+    )
+    shell.chat()
+    shell.notebooks()
+    chat_tokens.assert_called_once_with()
+    notebook_tokens.assert_called_once_with()
+    lookup.assert_not_called()
 
 
 @dataclass

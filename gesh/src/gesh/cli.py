@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -87,11 +88,14 @@ def build_shell(config: Config, console: Console) -> Shell:
     import gemini_chat
     import nblm
 
+    # Native subprocesses do not apply Windows PATHEXT lookup like a shell does.
+    gcloud_binary = (shutil.which("gcloud") or "gcloud") if config.auth == "gcloud" else "gcloud"
+
     def chat() -> object:
         tokens = (
             gemini_chat.EnvTokenProvider()  # GEMINI_CHAT_ACCESS_TOKEN
             if config.auth == "env"
-            else gemini_chat.GcloudTokenProvider()
+            else gemini_chat.GcloudTokenProvider(binary=gcloud_binary)
         )
         return gemini_chat.GeminiEnterpriseClient(
             tokens,
@@ -107,7 +111,7 @@ def build_shell(config: Config, console: Console) -> Shell:
         tokens = (
             nblm.EnvTokenProvider()  # NBLM_ACCESS_TOKEN
             if config.auth == "env"
-            else nblm.GcloudTokenProvider()
+            else nblm.GcloudTokenProvider(binary=gcloud_binary)
         )
         return nblm.NblmClient(
             tokens,
