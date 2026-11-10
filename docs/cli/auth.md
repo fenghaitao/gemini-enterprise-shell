@@ -52,6 +52,7 @@ Backend: gcloud
 ```text
 Not authenticated.
 Run 'nblm auth login' to log in.
+If browser login gets stuck, run 'gcloud auth login --force --no-launch-browser'. Open the printed URL, sign in, and paste the authorization code back into that terminal.
 ```
 
 **Exit Codes:**
@@ -60,6 +61,18 @@ Run 'nblm auth login' to log in.
 - `1`: User is NOT authenticated.
 
 ## Examples
+
+### Manual Browser Login
+
+If browser login gets stuck, cancel it with Ctrl-C and run:
+
+```bash
+gcloud auth login --force --no-launch-browser
+```
+
+Open the printed URL in your browser, sign in, and paste the authorization code
+back into the terminal running `gcloud`. Then retry your command. For Google Drive
+access, add `--enable-gdrive-access` to the command above.
 
 ### Initial Setup
 
