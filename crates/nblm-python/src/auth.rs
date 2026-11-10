@@ -267,6 +267,11 @@ pub fn login(drive_access: bool, force: bool) -> PyResult<()> {
         command.arg("--force");
     }
 
+    println!(
+        "If browser login gets stuck, cancel with Ctrl-C and run 'gcloud auth login --force --no-launch-browser{}'. Open the printed URL, sign in, and paste the authorization code back into that terminal.",
+        if drive_access { " --enable-gdrive-access" } else { "" }
+    );
+
     // Inherit stdio to allow browser interaction
     let status = command
         .stdin(Stdio::inherit())

@@ -960,6 +960,15 @@ class Shell:
         message = str(err).lower()
         if "reauthentication" in message or "gcloud auth login" in message:
             self.console.print(Text("Hint: run `gcloud auth login`, then try again.", style="cyan"))
+            self.console.print(
+                Text(
+                    "If browser login gets stuck, run "
+                    "`gcloud auth login --force --no-launch-browser`. "
+                    "Open the printed URL, sign in, and paste the authorization code "
+                    "back into that terminal.",
+                    style="cyan",
+                )
+            )
 
     def _run_in_thread(self, func: Callable[[], Any], label: str) -> Any:
         """Run a blocking SDK call in a daemon thread so the spinner and Ctrl-C keep working."""
